@@ -2,13 +2,13 @@
 import os
 import cv2
 import numpy as np
-# noinspection PyPep8Naming
 import SimpleITK as sitk
-import matplotlib.pyplot as plt
 
 from typing import Tuple
 from tqdm import tqdm
 
+case_dir = r"C:\Users\Hun\Desktop\127 test\Case 33_0921"
+case_name = case_dir[case_dir.rfind("\\") + 1:case_dir.rfind("_")]
 
 # window settings
 CT_min, CT_max = 0, 80     # brain WW: 80, WL: 40
@@ -134,69 +134,27 @@ def dicom2Dto3D(dcm_file_dir) -> None:
     resampled_array = resample_dicom(denoised_dicom) if ADJUST_WINDOW else resample_dicom(image)
     print(f'{resampled_array.shape=}')
     resampled_image = sitk.GetImageFromArray(resampled_array.astype(np.uint16))
-    resampled_image.CopyInformation(brain_dicom)
-    # resampled_image = set_meta_data(brain_dicom, resampled_image, is_resample=True)
+    # resampled_image.CopyInformation(brain_dicom)
+    resampled_image = set_meta_data(brain_dicom, resampled_image, is_resample=True)
 
     bone_resample_dicom = sitk.GetImageFromArray(bone_image.astype(np.uint16))
     bone_resample_dicom.CopyInformation(brain_dicom)
     # bone_resample_dicom = set_meta_data(brain_dicom, bone_resample_dicom)
     bone_resample_array = resample_dicom(bone_resample_dicom, mask=True)
     bone_resample_image = sitk.GetImageFromArray(bone_resample_array.astype(np.uint16))
-    # bone_resample_image = set_meta_data(brain_dicom, bone_resample_image, is_resample=True)
-    bone_resample_image.CopyInformation(brain_dicom)
+    bone_resample_image = set_meta_data(brain_dicom, bone_resample_image, is_resample=True)
+    # bone_resample_image.CopyInformation(brain_dicom)
 
-    output_path = r'C:\Users\Hun\Desktop\127 test\new_0825'
+    output_path = os.path.abspath(os.path.join(dcm_file_dir, "..", "result"))
     os.makedirs(output_path, exist_ok=True)
-    sitk.WriteImage(sitk.GetImageFromArray(brain_image.astype(np.uint16)), os.path.join(output_path, "Case 1-1_brain.dcm"))
-    sitk.WriteImage(sitk.GetImageFromArray(bone_image), os.path.join(output_path, "Case 1-1_bone.dcm"))
-    sitk.WriteImage(denoised_dicom, os.path.join(output_path, "Case 1-1_denoised_brain.dcm"))
-    sitk.WriteImage(resampled_image, os.path.join(output_path, "Case 1-1_brain_resample.dcm"))
-    sitk.WriteImage(bone_resample_image, os.path.join(output_path, "Case 1-1_bone_resample.dcm"))
+    case_name = dicom_names[0][dicom_names[0].rfind("\\") + 1:dicom_names[0].rfind("-")]  # Case 1-1 or Case 1-2
+    sitk.WriteImage(sitk.GetImageFromArray(brain_image.astype(np.uint16)), os.path.join(output_path, case_name + "-brain.dcm"))
+    sitk.WriteImage(sitk.GetImageFromArray(bone_image), os.path.join(output_path, case_name + "-bone.dcm"))
+    sitk.WriteImage(denoised_dicom, os.path.join(output_path, case_name + "-brain-denoised.dcm"))
+    sitk.WriteImage(resampled_image, os.path.join(output_path, case_name + "-brain-resample.dcm"))
+    sitk.WriteImage(bone_resample_image, os.path.join(output_path, case_name + "-bone-resample.dcm"))
 
     return None
-
-
-# def read_dicom_file(dcm_file_dir, filename):
-#     """
-#     Read the dicom file.
-#     :param dcm_file_dir:
-#     :param filename:
-#     """
-#     dcm_file = os.path.join(dcm_file_dir, filename)
-#     image_reader = sitk.ImageFileReader()
-#     image_reader.SetImageIO("GDCMImageIO")
-#     image_reader.SetFileName(dcm_file)
-#     image_reader.ReadImageInformation()
-#
-#     image = sitk.ReadImage(dcm_file, sitk.sitkFloat32)
-#     print(f'{image.GetSize()=}')
-#     pixel_data = adjust_hu(sitk.GetArrayFromImage(image)) if ADJUST_WINDOW else sitk.GetArrayFromImage(image)
-#     print(f"{pixel_data.shape=}")
-#     noise_cancel_data = find_max_area(pixel_data)
-#     for i in range(len(noise_cancel_data)):
-#         noise_cancel_data[i] = np.where(noise_cancel_data[i] > 0, 1, 0)
-#
-#         plt.title(f"WW: {window_width}, WL: {window_level}")
-#         plt.axis('off')
-#         plt.imshow(noise_cancel_data[i], cmap=plt.cm.gray)
-#         plt.show()
-
-
-# def adjust_hu(image, ct_min=CT_min, ct_max=CT_max, ww=window_width):
-#     """
-#     Adjust the HU value of the image.
-#     :param image:
-#     :param ct_min:
-#     :param ct_max:
-#     :param ww:
-#     :return: Adjusted image.
-#     """
-#     print(f' in adjust_hu() {ct_max=}, {ct_min=}, {ww=}')
-#     adjusted_image = np.clip(image, ct_min, ct_max).astype(np.float32)
-#     adjusted_image = (adjusted_image - ct_min) / ww * 255
-#     adjusted_image = adjusted_image.astype(np.uint16)
-#
-#     return adjusted_image
 
 
 def resample_dicom(dicom_image: sitk.Image, target_spacing=(1.0, 1.0, 1.0), mask=False) -> np.ndarray:
@@ -235,26 +193,7 @@ def resample_dicom(dicom_image: sitk.Image, target_spacing=(1.0, 1.0, 1.0), mask
     return sitk.GetArrayFromImage(resample_image)
 
 
-# def merge_dicom(origin, mask) -> sitk.Image:
-#     """
-#     Merge the mask and the original image.
-#     :param origin:
-#     :param mask:
-#     :return: The merged image.
-#     """
-#     mask = sitk.ReadImage(mask, sitk.sitkFloat32)
-#     origin = sitk.ReadImage(origin, sitk.sitkFloat32)
-#     mask = sitk.GetArrayFromImage(mask)
-#     origin = sitk.GetArrayFromImage(origin)
-#
-#     # use opencv to merge two images
-#     merged_dicom = cv2.bitwise_or(origin, mask)
-#     merged_dicom = sitk.GetImageFromArray(merged_dicom.astype(np.uint16))
-#
-#     return merged_dicom
-
-
 if __name__ == '__main__':
-    dicom_dir = r"C:\Users\Hun\Desktop\127 test\BL"
-    # dicom_dir = r"C:\Users\Hun\Desktop\127 test\FU"
-    dicom2Dto3D(dicom_dir)
+    dicom_bl_dir = os.path.join(case_dir, "dcm", "BL")
+    dicom_fu_dir = os.path.join(case_dir, "dcm", "FU")
+    dicom2Dto3D(dicom_fu_dir)

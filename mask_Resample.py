@@ -6,8 +6,9 @@ import SimpleITK as sitk
 
 from natsort import natsorted
 from typing import List
+from datetime import date
 
-from DICOM_2D_to_3D import resample_dicom
+from DICOM_Resample import resample_dicom, case_dir
 
 
 def merge_image(masks: List, mask_dir: str) -> None:
@@ -21,8 +22,6 @@ def merge_image(masks: List, mask_dir: str) -> None:
     for mask in masks[1:]:
         name = mask[:mask.rfind("-")]
         if temp[:temp.rfind("-")] == name:
-            # print(os.path.join(mask_dir, mask))
-            # print(os.path.join(mask_dir, temp))
             image_1 = cv2.imread(os.path.join(mask_dir, mask))
             image_2 = cv2.imread(os.path.join(mask_dir, temp))
             merge = cv2.add(image_1, image_2)
@@ -31,6 +30,7 @@ def merge_image(masks: List, mask_dir: str) -> None:
             os.remove(os.path.join(mask_dir, temp))
         else:
             temp = mask
+    return None
 
 
 def mask2Dto3D(mask_dir: str, dicom_dir: str, merge=False) -> None:
@@ -44,11 +44,13 @@ def mask2Dto3D(mask_dir: str, dicom_dir: str, merge=False) -> None:
     mask_list = natsorted(os.listdir(mask_dir))
     if merge:
         merge_image(mask_list, mask_dir)
-    mask_list = [f for f in mask_list if f.endswith(".tif")]
+        mask_list = natsorted(os.listdir(mask_dir))
+    # mask_list = [f for f in mask_list if f.endswith(".tif")]
 
     for mask in mask_list:
         if "p" in mask or "v" in mask:
             os.rename(os.path.join(mask_dir, mask), os.path.join(mask_dir, mask[:mask.rfind("-")] + ".tif"))
+    mask_list = natsorted(os.listdir(mask_dir))
 
     reader = sitk.ImageSeriesReader()
     series_ids = reader.GetGDCMSeriesIDs(dicom_dir)
@@ -57,11 +59,11 @@ def mask2Dto3D(mask_dir: str, dicom_dir: str, merge=False) -> None:
     reader.SetFileNames(dicom_names)
     dicom_image = reader.Execute()
 
+    # Create 3D mask
     mask_3d = np.zeros((len(dicom_names), dicom_image.GetSize()[0], dicom_image.GetSize()[1]), dtype=np.uint16)
     for i in range(len(dicom_names)):
         for mask in mask_list:
             if mask[mask.rfind("-")+1:mask.rfind(".")] == str(i):
-                print(i)
                 image = cv2.imread(os.path.join(mask_dir, mask), cv2.IMREAD_GRAYSCALE)
                 mask_3d[i, :, :] = image
 
@@ -69,9 +71,6 @@ def mask2Dto3D(mask_dir: str, dicom_dir: str, merge=False) -> None:
     mask_dcm = sitk.GetImageFromArray(mask_3d.astype(np.uint16))
 
     mask_dcm.CopyInformation(dicom_image)
-    # mask_dcm.SetSpacing(dicom_image.GetSpacing())
-    # mask_dcm.SetOrigin(dicom_image.GetOrigin())
-    # mask_dcm.SetDirection(dicom_image.GetDirection())
     print(f"{mask_dcm.GetSpacing()=}")
     print(f"{mask_dcm.GetOrigin()=}")
     print(f"{mask_dcm.GetDirection()=}")
@@ -82,15 +81,37 @@ def mask2Dto3D(mask_dir: str, dicom_dir: str, merge=False) -> None:
     print(f"{resample_mask.GetOrigin()=}")
     print(f"{resample_mask.GetDirection()=}")
 
-    mask_name = os.path.join(mask_dir, mask_list[0][:mask_list[0].rfind("-")] + "-mask" + ".dcm")
-    resample_mask_name = os.path.join(mask_dir, mask_list[0][:mask_list[0].rfind("-")] + "-mask-resample" + ".dcm")
-    sitk.WriteImage(mask_dcm, mask_name)
-    sitk.WriteImage(resample_mask, resample_mask_name)
+    output_path = os.path.abspath(os.path.join(mask_dir, "..", "result"))
+    os.makedirs(output_path, exist_ok=True)
+    mask_filename = os.path.join(output_path, mask_list[0][:mask_list[0].rfind("-")] + "-mask" + ".dcm")
+    resample_mask_filename = os.path.join(output_path, mask_list[0][:mask_list[0].rfind("-")] + "-mask-resample" + ".dcm")
+    sitk.WriteImage(mask_dcm, mask_filename)
+    sitk.WriteImage(resample_mask, resample_mask_filename)
+
+    mask_resample_back(mask_filename, resample_mask_filename)
 
     return None
 
 
+def mask_resample_back(origin_mask, regis_mask) -> None:
+    """
+    Resample the mask back to the original size.
+    :param origin_mask: The original mask.
+    :param regis_mask: The registered mask.
+    :return: None
+    """
+    ori_mask = sitk.ReadImage(origin_mask, sitk.sitkFloat32)
+    reg_mask = sitk.ReadImage(regis_mask, sitk.sitkFloat32)
+    reg_mask = sitk.Resample(reg_mask, ori_mask, sitk.Transform(), sitk.sitkNearestNeighbor, 0.0, reg_mask.GetPixelID())
+    reg_mask.CopyInformation(ori_mask)
+    reg_mask = sitk.Cast(reg_mask, sitk.sitkUInt16)
+    sitk.WriteImage(reg_mask, os.path.join(case_dir, "registration", f"registered-mask-{date.today()}.dcm"))
+    return None
+
+
 if __name__ == '__main__':
-    mask_path = r"C:\Users\Hun\Desktop\127 test\BL_Mask"
-    dicom_path = r"C:\Users\Hun\Desktop\127 test\BL"
+    # mask_path = r"C:\Users\Hun\Desktop\127 test\Case 5_0917\mask\FU"
+    # dicom_path = r"C:\Users\Hun\Desktop\127 test\Case 5_0917\dcm\BL"
+    mask_path = os.path.join(case_dir, "mask", "FU")
+    dicom_path = os.path.join(case_dir, "dcm", "BL")
     mask2Dto3D(mask_path, dicom_path)
