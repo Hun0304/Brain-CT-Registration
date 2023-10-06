@@ -7,20 +7,14 @@ import SimpleITK as sitk
 from typing import Tuple
 from tqdm import tqdm
 
-case_dir = r"C:\Users\Hun\Desktop\127 test\Case 33_0921"
-case_name = case_dir[case_dir.rfind("\\") + 1:case_dir.rfind("_")]
+from globel_veriable import CT_MAX, CT_MIN
 
-# window settings
-CT_min, CT_max = 0, 80     # brain WW: 80, WL: 40
-# CT_min, CT_max = -20, 180  # subdural WW: 200, WL: 80
-# CT_min, CT_max = -800, 2000  # temporal bone WW: 2800, WL: 600
 
-window_width, window_level = CT_max - CT_min, (CT_max + CT_min) // 2
 
 ADJUST_WINDOW = True
 
 
-def window2ct_value(ww, wl) -> Tuple[int, int]:
+def window2ct_value(ww: int, wl: int) -> Tuple[int, int]:
     """
     Convert the window width and window level to the CT value.
     :param ww: Window width.
@@ -30,7 +24,7 @@ def window2ct_value(ww, wl) -> Tuple[int, int]:
     return wl - ww // 2, wl + ww // 2
 
 
-def ct_value2window(ct_min, ct_max) -> Tuple[int, int]:
+def ct_value2window(ct_min: int, ct_max: int) -> Tuple[int, int]:
     """
     Convert the CT value to the window width and window level.
     :param ct_min:
@@ -98,7 +92,7 @@ def denoise(brain: np.ndarray, bone: np.ndarray) -> np.ndarray:
     return denoised_image
 
 
-def dicom2Dto3D(dcm_file_dir) -> None:
+def dicom2Dto3D(dcm_file_dir: str) -> None:
     """
     Convert 2D dicom images to 3D dicom image.
     :param dcm_file_dir: The directory of dicom images.
@@ -116,7 +110,7 @@ def dicom2Dto3D(dcm_file_dir) -> None:
     image = reader.Execute()
 
     # window settings
-    brain_dicom = sitk.IntensityWindowing(image, 0, 80, 0, 255)
+    brain_dicom = sitk.IntensityWindowing(image, CT_MIN, CT_MAX, 0, 255)
     bone_dicom = sitk.OtsuThreshold(image, 0, 1, 200)
 
     print(f"{brain_dicom.GetOrigin()=}")
@@ -147,12 +141,12 @@ def dicom2Dto3D(dcm_file_dir) -> None:
 
     output_path = os.path.abspath(os.path.join(dcm_file_dir, "..", "result"))
     os.makedirs(output_path, exist_ok=True)
-    case_name = dicom_names[0][dicom_names[0].rfind("\\") + 1:dicom_names[0].rfind("-")]  # Case 1-1 or Case 1-2
-    sitk.WriteImage(sitk.GetImageFromArray(brain_image.astype(np.uint16)), os.path.join(output_path, case_name + "-brain.dcm"))
-    sitk.WriteImage(sitk.GetImageFromArray(bone_image), os.path.join(output_path, case_name + "-bone.dcm"))
-    sitk.WriteImage(denoised_dicom, os.path.join(output_path, case_name + "-brain-denoised.dcm"))
-    sitk.WriteImage(resampled_image, os.path.join(output_path, case_name + "-brain-resample.dcm"))
-    sitk.WriteImage(bone_resample_image, os.path.join(output_path, case_name + "-bone-resample.dcm"))
+    case_number = dicom_names[0][dicom_names[0].rfind("\\") + 1:dicom_names[0].rfind("-")]  # Case 1-1 or Case 1-2
+    sitk.WriteImage(sitk.GetImageFromArray(brain_image.astype(np.uint16)), os.path.join(output_path, f"{case_number}-brain.dcm"))
+    sitk.WriteImage(sitk.GetImageFromArray(bone_image.astype(np.uint16)), os.path.join(output_path, f"{case_number}-bone.dcm"))
+    sitk.WriteImage(denoised_dicom, os.path.join(output_path, f"{case_number}-brain-denoised.dcm"))
+    sitk.WriteImage(resampled_image, os.path.join(output_path, f"{case_number}-brain-resample.dcm"))
+    sitk.WriteImage(bone_resample_image, os.path.join(output_path, f"{case_number}-bone-resample.dcm"))
 
     return None
 
@@ -191,9 +185,3 @@ def resample_dicom(dicom_image: sitk.Image, target_spacing=(1.0, 1.0, 1.0), mask
     print(f'in resample_dicom() {resample_image.GetDirection()=}')
 
     return sitk.GetArrayFromImage(resample_image)
-
-
-if __name__ == '__main__':
-    dicom_bl_dir = os.path.join(case_dir, "dcm", "BL")
-    dicom_fu_dir = os.path.join(case_dir, "dcm", "FU")
-    dicom2Dto3D(dicom_fu_dir)

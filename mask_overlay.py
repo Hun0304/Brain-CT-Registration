@@ -1,11 +1,15 @@
+
 import os
 import SimpleITK as sitk
 import matplotlib.pyplot as plt
 
 from tqdm import tqdm
+from datetime import date
+
+from globel_veriable import CASE_DIR, CASE_NAME
 
 
-def visualization(origin_dicom, regis_ct, result_dir) -> None:
+def visualization(origin_dicom: str, regis_ct: str, result_dir: str) -> None:
     """
     Visualize the registration result.
     :param origin_dicom: The baseline image.   Red channel.
@@ -13,8 +17,8 @@ def visualization(origin_dicom, regis_ct, result_dir) -> None:
     :param result_dir: The directory of the output images.
     :return: None
     """
-    case_name = os.path.basename(origin_dicom)[:os.path.basename(origin_dicom).rfind("-")]
-    case_name = case_name[:case_name.rfind("-")]
+    # case_name = os.path.basename(origin_dicom)[:os.path.basename(origin_dicom).rfind("-")]
+    # case_name = case_name[:case_name.rfind("-")]
     origin = sitk.ReadImage(origin_dicom, sitk.sitkFloat32)
     regis = sitk.ReadImage(regis_ct, sitk.sitkFloat32)
     interval = 6
@@ -23,13 +27,13 @@ def visualization(origin_dicom, regis_ct, result_dir) -> None:
     total_slices = origin.GetSize()[2] if origin.GetSize()[2] < regis.GetSize()[2] else regis.GetSize()[2]
     num_subplots = total_slices // interval + 1
 
-    for i in tqdm(range(num_subplots), desc="Visualizing"):
+    for i in tqdm(range(num_subplots), desc="Visualizing..."):
         start_slice = i * interval
         end_slice = min((i + 1) * interval, total_slices)
 
         # 創建一張畫布
         fig, axs = plt.subplots(2, 3, figsize=(16, 12))
-        fig.suptitle(case_name + "  Red: Origin, Green: Registered", fontsize=16)
+        fig.suptitle(f"{CASE_NAME}  Red: Origin, Green: Registered", fontsize=16)
 
         for j, ax in enumerate(axs.flat):
             slice_idx = start_slice + j
@@ -50,7 +54,7 @@ def visualization(origin_dicom, regis_ct, result_dir) -> None:
             else:
                 ax.axis("off")  # 如果切片不夠，關閉多餘的子圖
 
-        plt.savefig(os.path.join(result_dir, f"canvas_{i + 1}.png"))
+        plt.savefig(os.path.join(result_dir, f"result_{i + 1}.png"))
         # plt.show()
 
     return None
@@ -107,19 +111,21 @@ def mask_overlay(dcm, mask, dir_path) -> None:
 
 
 if __name__ == '__main__':
-    case_path = r"C:\Users\Hun\Desktop\127 test\Case 33_0921"
-    result_path = os.path.join(case_path, "result")
-    reg_path = os.path.join(case_path, "registration")
-    mask_path = os.path.join(case_path, "mask", "result")
-    dicom_path = os.path.join(case_path, "dcm", "result")
+    result_path = os.path.join(CASE_DIR, "result")
+    reg_path = os.path.join(CASE_DIR, "registration")
+    mask_path = os.path.join(CASE_DIR, "mask", "result")
+    dicom_path = os.path.join(CASE_DIR, "dcm", "result")
 
-    reg_ct = os.path.join(reg_path, "registered-ct-0921.dcm")
-    reg_mask = os.path.join(reg_path, "registered-mask-0921.dcm")
-    dicom = os.path.join(dicom_path, "Case 33-1-brain-resample.dcm")
-    mask = os.path.join(mask_path, "Case 33-2-mask-resample.dcm")
+    reg_ct_bf = os.path.join(reg_path, "registered-ct-2023-10-05.dcm")
+    reg_ct = os.path.join(reg_path, f"registered-ct-{date.today()}.dcm")
+    reg_mask = os.path.join(reg_path, f"registered-mask-{date.today()}.dcm")
+    dicom_bl = os.path.join(dicom_path, f"{CASE_NAME}-1-brain-resample.dcm")
+    dicom_fu = os.path.join(dicom_path, f"{CASE_NAME}-2-brain-resample.dcm")
+    mask_bl = os.path.join(mask_path, f"{CASE_NAME}-1-mask-resample.dcm")
+    mask_fu = os.path.join(mask_path, f"{CASE_NAME}-2-mask-resample.dcm")
     # mask = r"C:\Users\Hun\Desktop\127 test\mask_overlay_to_baseline_0825.dcm"
     # mask = r"C:\Users\Hun\Desktop\127 test\FU_Mask\Case 1-2-mask-resample.dcm"
     # mask_overlay(dicom, reg_mask, result_path)
     os.makedirs(result_path, exist_ok=True)
     # visualization(dicom, reg_ct, result_path)
-    visualization(mask, reg_mask, result_path)
+    visualization(mask_bl, reg_mask, result_path)
