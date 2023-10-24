@@ -1,38 +1,45 @@
 
 import os
+import json
 import SimpleITK as sitk
 
+from tqdm import tqdm
+from typing import Tuple
+from natsort import natsorted
 from datetime import date
 
-from globel_veriable import CASE_DIR, CASE_NAME
+from globel_veriable import REGISTRATION_DIR_127
 from mask_Resample import mask_resample_back
 
 
-def registration(fixed_image, moving_image, mask=False) -> sitk.Euler3DTransform:
+def registration(fixed_image, moving_image, mask=False, multi_model=False) -> Tuple[sitk.VersorRigid3DTransform, float]:
     """
     # Registration
     :param fixed_image: baseline image
     :param moving_image: follow-up image
     :param mask: whether to use mask
+    :param multi_model: whether to use multi-model ex: ct & mri
     :return: final_transform
     """
     interpolator = sitk.sitkNearestNeighbor if mask else sitk.sitkLinear
 
     registration_method = sitk.ImageRegistrationMethod()
-    # registration_method.SetMetricAsMattesMutualInformation()
-    registration_method.SetMetricAsCorrelation()
+    if multi_model:
+        registration_method.SetMetricAsMattesMutualInformation()
+    else:
+        registration_method.SetMetricAsCorrelation()
     registration_method.SetMetricSamplingStrategy(registration_method.RANDOM)
-    registration_method.SetMetricSamplingPercentage(1e-3)
+    registration_method.SetMetricSamplingPercentage(0.01)
     registration_method.SetInterpolator(interpolator)
     registration_method.SetOptimizerAsGradientDescent(learningRate=1.0,
-                                                      numberOfIterations=500,
-                                                      convergenceMinimumValue=1e-8,
+                                                      numberOfIterations=1000,
+                                                      convergenceMinimumValue=1e-6,
                                                       convergenceWindowSize=10)
     registration_method.SetOptimizerScalesFromPhysicalShift()
     initial_transform = sitk.CenteredTransformInitializer(fixed_image,
                                                           moving_image,
-                                                          # sitk.VersorRigid3DTransform(),
-                                                          sitk.Euler3DTransform(),
+                                                          sitk.VersorRigid3DTransform(),
+                                                          # sitk.Euler3DTransform(),
                                                           sitk.CenteredTransformInitializerFilter.GEOMETRY)
     registration_method.SetInitialTransform(initial_transform, inPlace=False)
     final_transform = registration_method.Execute(fixed_image, moving_image)
@@ -40,57 +47,88 @@ def registration(fixed_image, moving_image, mask=False) -> sitk.Euler3DTransform
     print(f"Optimizer's stopping condition, {registration_method.GetOptimizerStopConditionDescription()}")
     print(f"Final transform parameters: {final_transform.GetParameters()}")
 
-    return final_transform
+    return final_transform, registration_method.GetMetricValue()
 
 
-def registration_mask(mask_3d, bl, tfm: sitk.Euler3DTransform, result_dir) -> None:
+def registration_mask(mask_3d: sitk.Image, mask_bl: sitk.Image, tfm: sitk.VersorRigid3DTransform, result_dir: str) -> None:
     """
     # Using transform to 3d mask
     :param mask_3d: 3D mask
-    :param bl: baseline image
+    :param mask_bl: baseline image mask
     :param tfm: transform
     :param result_dir: result directory
     :return: None
     """
-    registered_mask_3d = sitk.Resample(mask_3d, bl, tfm, sitk.sitkNearestNeighbor, 0.0, mask_3d.GetPixelID())
+    registered_mask_3d = sitk.Resample(mask_3d, mask_bl, tfm, sitk.sitkNearestNeighbor, 0.0, mask_3d.GetPixelID())
     registered_mask_3d = sitk.Cast(registered_mask_3d, sitk.sitkUInt16)
-    registered_mask_3d.CopyInformation(bl)
+    registered_mask_3d.CopyInformation(mask_bl)
     sitk.WriteImage(registered_mask_3d, os.path.join(result_dir, f"registered-mask-{date.today()}.dcm"))
     return None
 
 
-if __name__ == '__main__':
-    reg_path = os.path.join(CASE_DIR, "registration")
-    dicom_path = os.path.join(CASE_DIR, "dcm", "result")
-    mask_path = os.path.join(CASE_DIR, "mask", "result")
-    bone_dicom_bl = os.path.join(dicom_path, f"{CASE_NAME}-1-bone-resample.dcm")
-    bone_dicom_fu = os.path.join(dicom_path, f"{CASE_NAME}-2-bone-resample.dcm")
-    brain_dicom_bl = os.path.join(dicom_path, f"{CASE_NAME}-1-brain-resample.dcm")
-    brain_dicom_fu = os.path.join(dicom_path, f"{CASE_NAME}-2-brain-resample.dcm")
-    # mask_dicom_bl = os.path.join(mask_path, f"{CASE_NAME}-1-mask-resample.dcm")
-    mask_dicom_fu = os.path.join(mask_path, f"{CASE_NAME}-2-mask-resample.dcm")
-    bone_image_bl = sitk.ReadImage(bone_dicom_bl, sitk.sitkFloat32)
-    bone_image_fu = sitk.ReadImage(bone_dicom_fu, sitk.sitkFloat32)
-    brain_image_bl = sitk.ReadImage(brain_dicom_bl, sitk.sitkFloat32)
-    brain_image_fu = sitk.ReadImage(brain_dicom_fu, sitk.sitkFloat32)
-    # mask_image_bl = sitk.ReadImage(mask_dicom_bl, sitk.sitkFloat32)
-    mask_image_fu = sitk.ReadImage(mask_dicom_fu, sitk.sitkFloat32)
+def registration_main():
+    """
+    Main function.
+    """
+    metric_value_dict = {}
+    case_dir = natsorted(os.listdir(REGISTRATION_DIR_127))
 
-    transform_dcm = registration(brain_image_bl, brain_image_fu)
-    # transform_mask = registration(mask_image_bl, mask_image_fu, mask=True)
-    registered_dcm = sitk.Resample(brain_image_fu, brain_image_bl, transform_dcm, sitk.sitkLinear, 0.0,
-                                   brain_image_fu.GetPixelID())
-    # registered_mask = sitk.Resample(mask_image_fu, mask_image_bl, transform_mask, sitk.sitkNearestNeighbor, 0.0,
-    #                                 mask_image_fu.GetPixelID())
+    with tqdm(total=len(case_dir)) as pbar:
+        for case_name in case_dir:
+            pbar.set_description(f"{case_name} is registering...")
+            reg_flag = True
+            reg_path = os.path.join(REGISTRATION_DIR_127, case_name, "registration result")
+            dicom_path = os.path.join(REGISTRATION_DIR_127, case_name, "dcm", "result")
+            mask_path = os.path.join(REGISTRATION_DIR_127, case_name, "mask", "result")
 
-    registered_dcm.CopyInformation(brain_image_bl)
-    # registered_mask.CopyInformation(mask_image_bl)
-    registered_dcm = sitk.Cast(registered_dcm, sitk.sitkUInt16)
-    os.makedirs(reg_path, exist_ok=True)
-    # registered_mask = sitk.Cast(registered_mask, sitk.sitkUInt16)
-    sitk.WriteImage(registered_dcm, os.path.join(reg_path, f"registered-ct-{date.today()}.dcm"))
-    # sitk.WriteImage(registered_mask, os.path.join(reg_path, f"registered-mask-{date.today()}.dcm"))
-    sitk.WriteTransform(transform_dcm, os.path.join(reg_path, f"registered-ct-tf-{date.today()}.tfm"))
-    # sitk.WriteTransform(transform_mask, os.path.join(reg_path, f"registered-mask-tf-{date.today()}.tfm"))
+            def check_file(file_path: str, file_type: str):
+                """
+                Check the file exists or not.
+                :param file_path: The file path.
+                :param file_type: The file type.
+                :return: The file.
+                """
+                nonlocal reg_flag
+                if os.path.exists(file_path):
+                    return sitk.ReadImage(file_path, sitk.sitkFloat32)
+                else:
+                    reg_flag = False
+                    print(f"{case_name} has no {file_type}")
+                    return None
 
-    registration_mask(mask_image_fu, bone_image_bl, transform_dcm, reg_path)
+            bone_image_bl = check_file(os.path.join(dicom_path, f"{case_name}-1-bone-resample.dcm"),
+                                       "BL bone resample dicom")
+            bone_image_fu = check_file(os.path.join(dicom_path, f"{case_name}-2-bone-resample.dcm"),
+                                       "FU bone resample dicom")
+            brain_image_bl = check_file(os.path.join(dicom_path, f"{case_name}-1-brain-resample.dcm"),
+                                        "BL brain resample dicom")
+            brain_image_fu = check_file(os.path.join(dicom_path, f"{case_name}-2-brain-resample.dcm"),
+                                        "FU brain resample dicom")
+            mask_image_bl = check_file(os.path.join(mask_path, f"{case_name}-1-mask-resample.dcm"),
+                                       "BL mask")
+            mask_image_fu = check_file(os.path.join(mask_path, f"{case_name}-2-mask-resample.dcm"),
+                                       "FU mask")
+
+            if reg_flag:
+                transform_dcm, metric_value = registration(brain_image_bl, brain_image_fu)
+                metric_value_dict[case_name] = metric_value
+                registered_dcm = sitk.Resample(brain_image_fu, brain_image_bl, transform_dcm, sitk.sitkLinear, 0.0,
+                                               brain_image_fu.GetPixelID())
+                registered_dcm.CopyInformation(brain_image_bl)
+                registered_dcm = sitk.Cast(registered_dcm, sitk.sitkUInt16)
+                os.makedirs(reg_path, exist_ok=True)
+                sitk.WriteImage(registered_dcm, os.path.join(reg_path, f"registered-ct-{date.today()}.dcm"))
+                sitk.WriteTransform(transform_dcm, os.path.join(reg_path, f"registered-ct-tf-{date.today()}.tfm"))
+
+                registration_mask(mask_image_fu, mask_image_bl, transform_dcm, reg_path)
+            pbar.update()
+
+    with open(os.path.abspath(os.path.join(REGISTRATION_DIR_127, "..", "127_metric_value.json")), "w") as f:
+        json.dump(metric_value_dict, f)
+
+    print(metric_value_dict)
+    print(sorted(metric_value_dict.values()))
+    print(sorted(metric_value_dict, key=metric_value_dict.get))
+    print(f"Best case: {sorted(metric_value_dict, key=metric_value_dict.get)[0]}")
+    print(f"Worst case: {sorted(metric_value_dict, key=metric_value_dict.get)[-1]}")
+    return None

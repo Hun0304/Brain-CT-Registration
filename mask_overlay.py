@@ -5,35 +5,36 @@ import matplotlib.pyplot as plt
 
 from tqdm import tqdm
 from datetime import date
+from natsort import natsorted
 
-from globel_veriable import CASE_DIR, CASE_NAME
+from globel_veriable import REGISTRATION_DIR_127
 
 
-def visualization(origin_dicom: str, regis_ct: str, result_dir: str) -> None:
+def visualization(origin_dicom: str, regis_dicom: str, result_dir: str) -> None:
     """
     Visualize the registration result.
     :param origin_dicom: The baseline image.   Red channel.
-    :param regis_ct: The follow-up image.      Green channel.
+    :param regis_dicom: The follow-up image.      Green channel.
     :param result_dir: The directory of the output images.
     :return: None
     """
-    # case_name = os.path.basename(origin_dicom)[:os.path.basename(origin_dicom).rfind("-")]
-    # case_name = case_name[:case_name.rfind("-")]
+    case_name = os.path.basename(regis_dicom)[:os.path.basename(origin_dicom).find("-")]
+    case_name = case_name[:case_name.rfind("-")]
     origin = sitk.ReadImage(origin_dicom, sitk.sitkFloat32)
-    regis = sitk.ReadImage(regis_ct, sitk.sitkFloat32)
+    regis = sitk.ReadImage(regis_dicom, sitk.sitkFloat32)
     interval = 6
 
     # 計算需要創建多少個子圖
     total_slices = origin.GetSize()[2] if origin.GetSize()[2] < regis.GetSize()[2] else regis.GetSize()[2]
     num_subplots = total_slices // interval + 1
 
-    for i in tqdm(range(num_subplots), desc="Visualizing..."):
+    for i in tqdm(range(num_subplots), desc=f"{case_name} is visualizing...", position=0):
         start_slice = i * interval
         end_slice = min((i + 1) * interval, total_slices)
 
         # 創建一張畫布
         fig, axs = plt.subplots(2, 3, figsize=(16, 12))
-        fig.suptitle(f"{CASE_NAME}  Red: Origin, Green: Registered", fontsize=16)
+        fig.suptitle(f"{case_name}  Red: Origin BL, Green: Registered FU", fontsize=16)
 
         for j, ax in enumerate(axs.flat):
             slice_idx = start_slice + j
@@ -110,22 +111,29 @@ def mask_overlay(dcm, mask, dir_path) -> None:
     return None
 
 
-if __name__ == '__main__':
-    result_path = os.path.join(CASE_DIR, "result")
-    reg_path = os.path.join(CASE_DIR, "registration")
-    mask_path = os.path.join(CASE_DIR, "mask", "result")
-    dicom_path = os.path.join(CASE_DIR, "dcm", "result")
-
-    reg_ct_bf = os.path.join(reg_path, "registered-ct-2023-10-05.dcm")
-    reg_ct = os.path.join(reg_path, f"registered-ct-{date.today()}.dcm")
-    reg_mask = os.path.join(reg_path, f"registered-mask-{date.today()}.dcm")
-    dicom_bl = os.path.join(dicom_path, f"{CASE_NAME}-1-brain-resample.dcm")
-    dicom_fu = os.path.join(dicom_path, f"{CASE_NAME}-2-brain-resample.dcm")
-    mask_bl = os.path.join(mask_path, f"{CASE_NAME}-1-mask-resample.dcm")
-    mask_fu = os.path.join(mask_path, f"{CASE_NAME}-2-mask-resample.dcm")
-    # mask = r"C:\Users\Hun\Desktop\127 test\mask_overlay_to_baseline_0825.dcm"
-    # mask = r"C:\Users\Hun\Desktop\127 test\FU_Mask\Case 1-2-mask-resample.dcm"
-    # mask_overlay(dicom, reg_mask, result_path)
-    os.makedirs(result_path, exist_ok=True)
-    # visualization(dicom, reg_ct, result_path)
-    visualization(mask_bl, reg_mask, result_path)
+def mask_overlay_main() -> None:
+    """
+    Main function.
+    :return:
+    """
+    no_mask_list = ["Case 25", "Case 70", "Case 156", "Case 299", "Case 319", "Case 327", "Case 329", "Case 337"]
+    case_list = natsorted(os.listdir(REGISTRATION_DIR_127))
+    with tqdm(total=len(case_list)) as pbar:
+        for case_name in case_list:
+            pbar.set_description(f"{case_name} is visualizing...")
+            if case_name in no_mask_list:
+                pbar.update()
+                continue
+            result_path = os.path.join(REGISTRATION_DIR_127, case_name, "result")
+            reg_path = os.path.join(REGISTRATION_DIR_127, case_name, "registration result")
+            mask_path = os.path.join(REGISTRATION_DIR_127, case_name, "mask", "result")
+            dicom_path = os.path.join(REGISTRATION_DIR_127, case_name, "dcm", "result")
+            reg_ct = os.path.join(reg_path, f"registered-ct-{date.today()}.dcm")
+            reg_mask = os.path.join(reg_path, f"registered-mask-{date.today()}.dcm")
+            dicom_bl = os.path.join(dicom_path, f"{case_name}-1-brain-resample.dcm")
+            dicom_fu = os.path.join(dicom_path, f"{case_name}-2-brain-resample.dcm")
+            mask_bl = os.path.join(mask_path, f"{case_name}-1-mask-resample.dcm")
+            mask_fu = os.path.join(mask_path, f"{case_name}-2-mask-resample.dcm")
+            os.makedirs(result_path, exist_ok=True)
+            visualization(reg_mask, mask_bl, result_path)
+            pbar.update()

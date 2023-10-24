@@ -1,6 +1,7 @@
 
-CASE_DIR = r"C:\Users\Hun\Desktop\127 test\Case 223_1006"
-CASE_NAME = CASE_DIR[CASE_DIR.rfind("\\") + 1:CASE_DIR.rfind("_")]
+REGISTRATION_DIR_127 = r"D:\MS\TRC-LAB\ICH Project\Registration\ICH_127"
+DATASETS_DIR_127 = r"D:\MS\TRC-LAB\ICH Datasets\ICH_127"
+
 # window settings
 CT_MIN, CT_MAX = 0, 80     # brain WW: 80, WL: 40
 # CT_MIN, CT_MAX = -20, 180  # subdural WW: 200, WL: 80

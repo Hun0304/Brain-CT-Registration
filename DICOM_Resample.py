@@ -9,9 +9,74 @@ from tqdm import tqdm
 
 from globel_veriable import CT_MAX, CT_MIN
 
-
-
 ADJUST_WINDOW = True
+
+
+# def is_supported_pixel_type(image_array):
+#     """
+#     Check whether the pixel type of the image is supported by SimpleITK.
+#     :param image_array:
+#     :return:
+#     """
+#     supported_pixel_types = [
+#         sitk.sitkUInt8,
+#         sitk.sitkUInt16,
+#         sitk.sitkUInt32,
+#         sitk.sitkUInt64,
+#         sitk.sitkInt8,
+#         sitk.sitkInt16,
+#         sitk.sitkInt32,
+#         sitk.sitkInt64,
+#         sitk.sitkFloat32,
+#         sitk.sitkFloat64,
+#         sitk.sitkComplexFloat32,
+#         sitk.sitkComplexFloat64
+#     ]
+#
+#     return image_array.dtype in supported_pixel_types
+
+
+# def find_center_of_mass(image: sitk.Image) -> sitk.Image:
+#     """
+#     將圖像中心的像素填充為黑色。
+#     :param image:
+#     :return:
+#     """
+#     image_array = sitk.GetArrayFromImage(image)
+#     non_zero_indices = np.nonzero(image_array)
+#     center = np.mean(non_zero_indices, axis=1)
+#     # 將影像擴充至原始大小的3D空間
+#     expanded_image = np.zeros_like(image_array)  # 創建一個空的3D影像
+#
+#     # 計算擴充後的中心位置
+#     center_z, center_x, center_y = map(int, center)
+#
+#     # 計算擴充後的範圍
+#     z_range = (expanded_image[0] - center_z).astype(np.int8)
+#     x_range = (expanded_image[1] - center_x).astype(np.int8)
+#     y_range = (expanded_image[2] - center_y).astype(np.int8)
+#
+#     # print(center_x, center_x + x_range)
+#     # print(center_y, center_y + y_range)
+#     print(f"{max(center_z + z_range.all(), 0) + z_range.all()=}")
+#     print(f"{non_zero_indices[1]=}")
+#     print(f"{image_array[non_zero_indices[1]]=}")
+#     print(f"{image_array[1].shape=}")
+#     print(f"{image_array[2].shape=}")
+#
+#     # 複製有像素範圍到擴充影像的對應位置
+#     # expanded_image[center_x: center_x + x_range,
+#     #                center_y: center_y + y_range,
+#     #                max(center_z + z_range.all(), 0):
+#     #                max(center_z + z_range.all(), 0) + z_range.all()] = image_array[non_zero_indices[1],
+#     #                                                                                non_zero_indices[2],
+#     #                                                                                non_zero_indices[0]]
+#
+#     # 至此，expanded_image就是擴充後的3D影像
+#
+#     # filled_image = sitk.Cast(expanded_image, sitk.sitkUInt16)
+#
+#     # return filled_image
 
 
 def window2ct_value(ww: int, wl: int) -> Tuple[int, int]:
@@ -34,12 +99,11 @@ def ct_value2window(ct_min: int, ct_max: int) -> Tuple[int, int]:
     return ct_max - ct_min, (ct_max + ct_min) // 2
 
 
-def set_meta_data(base_image: sitk.Image, save_image: sitk.Image, is_resample=False) -> sitk.Image:
+def set_meta_data(save_image: sitk.Image, base_image: sitk.Image) -> sitk.Image:
     """
     Set the metadata of the image.
-    :param base_image: The image to be referenced.
     :param save_image: The image to be saved.
-    :param is_resample: Whether to resample the image.
+    :param base_image: The image to be referenced.
     """
     # save_image.SetMetaData("0008|0060", save_image.GetMetaData("0008|0060"))  # Modality: CT
     # save_image.SetMetaData(metadata_inter, save_image.GetMetaData(metadata_inter))  # Rescale Intercept
@@ -48,8 +112,6 @@ def set_meta_data(base_image: sitk.Image, save_image: sitk.Image, is_resample=Fa
 
     save_image.SetOrigin(base_image.GetOrigin())
     save_image.SetDirection(base_image.GetDirection())
-    if not is_resample:
-        save_image.SetSpacing(base_image.GetSpacing())
 
     return save_image
 
@@ -80,15 +142,17 @@ def denoise(brain: np.ndarray, bone: np.ndarray) -> np.ndarray:
     :return: Denoised image.
     """
     denoised_image = np.zeros(bone.shape, dtype=np.uint8)
-    print(bone.shape)
+    with tqdm(total=denoised_image.shape[0], position=0) as pbar:
+        pbar.set_description(desc="Denoising...")
+        for i in range(denoised_image.shape[0]):
+            bone_2d = bone[i, :, :]
+            brain_2d = brain[i, :, :]
+            for y in range(bone_2d.shape[0]):
+                for x in range(bone_2d.shape[1]):
+                    if bone_2d[y, x] == 255:  # 白色區域
+                        denoised_image[i, y, x] = brain_2d[y, x]
+            pbar.update()
 
-    for i in tqdm(range(denoised_image.shape[0]), desc="Denoising..."):
-        bone_2d = bone[i, :, :]
-        brain_2d = brain[i, :, :]
-        for y in range(bone_2d.shape[0]):
-            for x in range(bone_2d.shape[1]):
-                if bone_2d[y, x] == 255:  # 白色區域
-                    denoised_image[i, y, x] = brain_2d[y, x]
     return denoised_image
 
 
@@ -104,49 +168,49 @@ def dicom2Dto3D(dcm_file_dir: str) -> None:
         exit(1)
     series_id = series_ids[0]
     dicom_names = reader.GetGDCMSeriesFileNames(dcm_file_dir, series_id)
-    print(f'{dicom_names=}')
     reader.SetFileNames(dicom_names)
 
     image = reader.Execute()
-
     # window settings
     brain_dicom = sitk.IntensityWindowing(image, CT_MIN, CT_MAX, 0, 255)
-    bone_dicom = sitk.OtsuThreshold(image, 0, 1, 200)
-
-    print(f"{brain_dicom.GetOrigin()=}")
-    print(f"{brain_dicom.GetSpacing()=}")
-    print(f"{brain_dicom.GetDirection()=}")
+    bone_setting = sitk.IntensityWindowing(image, -480, 2500, 0, 255)
+    bone_dicom = sitk.OtsuThreshold(bone_setting, 0, 1)
+    # bone_setting = sitk.Cast(bone_setting, sitk.sitkUInt16)
 
     # denoise
     brain_image = sitk.GetArrayFromImage(brain_dicom)
     bone_image = find_max_area(sitk.GetArrayFromImage(bone_dicom))
-    denoised_image = denoise(brain_image, bone_image).astype(np.uint16)
+    if brain_image.shape != bone_image.shape:
+        # bone image add black slice
+        black_slice = np.zeros((brain_image.shape[0] - bone_image.shape[0],
+                                bone_image.shape[1],
+                                bone_image.shape[2]), dtype=np.uint16)
+        bone_image = np.append(bone_image, black_slice, axis=0)
+    brain_denoised_image = denoise(brain_image, bone_image)
 
-    denoised_dicom = sitk.GetImageFromArray(denoised_image)
-    denoised_dicom.CopyInformation(brain_dicom)
-    # denoised_dicom = set_meta_data(brain_dicom, denoised_dicom)
-    resampled_array = resample_dicom(denoised_dicom) if ADJUST_WINDOW else resample_dicom(image)
-    print(f'{resampled_array.shape=}')
-    resampled_image = sitk.GetImageFromArray(resampled_array.astype(np.uint16))
-    # resampled_image.CopyInformation(brain_dicom)
-    resampled_image = set_meta_data(brain_dicom, resampled_image, is_resample=True)
+    brain_denoised_dicom = sitk.GetImageFromArray(brain_denoised_image.astype(np.uint16))
+    brain_denoised_dicom.CopyInformation(image)
+    brain_resampled_array = resample_dicom(brain_denoised_dicom)
+    brain_resampled_image = sitk.GetImageFromArray(brain_resampled_array.astype(np.uint16))
+    brain_resampled_image = set_meta_data(brain_resampled_image, image)
 
     bone_resample_dicom = sitk.GetImageFromArray(bone_image.astype(np.uint16))
-    bone_resample_dicom.CopyInformation(brain_dicom)
-    # bone_resample_dicom = set_meta_data(brain_dicom, bone_resample_dicom)
+    bone_resample_dicom.CopyInformation(image)
     bone_resample_array = resample_dicom(bone_resample_dicom, mask=True)
     bone_resample_image = sitk.GetImageFromArray(bone_resample_array.astype(np.uint16))
-    bone_resample_image = set_meta_data(brain_dicom, bone_resample_image, is_resample=True)
-    # bone_resample_image.CopyInformation(brain_dicom)
+    bone_resample_image = set_meta_data(bone_resample_image, image)
 
     output_path = os.path.abspath(os.path.join(dcm_file_dir, "..", "result"))
     os.makedirs(output_path, exist_ok=True)
     case_number = dicom_names[0][dicom_names[0].rfind("\\") + 1:dicom_names[0].rfind("-")]  # Case 1-1 or Case 1-2
-    sitk.WriteImage(sitk.GetImageFromArray(brain_image.astype(np.uint16)), os.path.join(output_path, f"{case_number}-brain.dcm"))
-    sitk.WriteImage(sitk.GetImageFromArray(bone_image.astype(np.uint16)), os.path.join(output_path, f"{case_number}-bone.dcm"))
-    sitk.WriteImage(denoised_dicom, os.path.join(output_path, f"{case_number}-brain-denoised.dcm"))
-    sitk.WriteImage(resampled_image, os.path.join(output_path, f"{case_number}-brain-resample.dcm"))
+    sitk.WriteImage(sitk.GetImageFromArray(brain_image.astype(np.uint16)),
+                    os.path.join(output_path, f"{case_number}-brain.dcm"))
+    sitk.WriteImage(sitk.GetImageFromArray(bone_image.astype(np.uint16)),
+                    os.path.join(output_path, f"{case_number}-bone.dcm"))
+    sitk.WriteImage(brain_denoised_dicom, os.path.join(output_path, f"{case_number}-brain-denoised.dcm"))
+    sitk.WriteImage(brain_resampled_image, os.path.join(output_path, f"{case_number}-brain-resample.dcm"))
     sitk.WriteImage(bone_resample_image, os.path.join(output_path, f"{case_number}-bone-resample.dcm"))
+    # sitk.WriteImage(bone_setting, os.path.join(output_path, f"{case_number}-bone-setting.dcm"))
 
     return None
 
@@ -175,13 +239,5 @@ def resample_dicom(dicom_image: sitk.Image, target_spacing=(1.0, 1.0, 1.0), mask
                                    dicom_image.GetDirection(),
                                    0.0,
                                    dicom_image.GetPixelIDValue())
-
-    print(f'in resample_dicom() {original_spacing=}')
-    print(f'in resample_dicom() {original_shape=}')
-    print(f'in resample_dicom() {scaling_factors=}')
-    print(f'in resample_dicom() {resample_image.GetSize()=}')
-    print(f'in resample_dicom() {resample_image.GetSpacing()=}')
-    print(f'in resample_dicom() {resample_image.GetOrigin()=}')
-    print(f'in resample_dicom() {resample_image.GetDirection()=}')
 
     return sitk.GetArrayFromImage(resample_image)

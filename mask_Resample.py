@@ -7,9 +7,10 @@ import SimpleITK as sitk
 from natsort import natsorted
 from typing import List
 from datetime import date
+from tqdm import tqdm
 
-from globel_veriable import CASE_DIR
-from DICOM_Resample import resample_dicom
+from globel_veriable import REGISTRATION_DIR_127
+from DICOM_Resample import resample_dicom, set_meta_data
 
 
 def merge_image(masks: List, mask_dir: str) -> None:
@@ -39,7 +40,6 @@ def mask2Dto3D(mask_dir: str, dicom_dir: str) -> None:
     Merge the masks with the same name and convert them to 3D.
     :param mask_dir: The directory of masks.
     :param dicom_dir: The directory of dicom images.
-    :param merge: Whether to merge the masks.
     :return: None
     """
     mask_list = natsorted(os.listdir(mask_dir))
@@ -67,19 +67,11 @@ def mask2Dto3D(mask_dir: str, dicom_dir: str) -> None:
                 image = cv2.imread(os.path.join(mask_dir, mask), cv2.IMREAD_GRAYSCALE)
                 mask_3d[i, :, :] = image
 
-    print(mask_3d.shape)
     mask_dcm = sitk.GetImageFromArray(mask_3d.astype(np.uint16))
-
     mask_dcm.CopyInformation(dicom_image)
-    print(f"{mask_dcm.GetSpacing()=}")
-    print(f"{mask_dcm.GetOrigin()=}")
-    print(f"{mask_dcm.GetDirection()=}")
     resample_mask = resample_dicom(mask_dcm, mask=True)
     resample_mask = sitk.GetImageFromArray(resample_mask.astype(np.uint16))
-    resample_mask.SetOrigin(dicom_image.GetOrigin())
-    resample_mask.SetDirection(dicom_image.GetDirection())
-    print(f"{resample_mask.GetOrigin()=}")
-    print(f"{resample_mask.GetDirection()=}")
+    resample_mask = set_meta_data(resample_mask, dicom_image)
 
     output_path = os.path.abspath(os.path.join(mask_dir, "..", "result"))
     os.makedirs(output_path, exist_ok=True)
@@ -90,23 +82,30 @@ def mask2Dto3D(mask_dir: str, dicom_dir: str) -> None:
     sitk.WriteImage(mask_dcm, mask_filename)
     sitk.WriteImage(resample_mask, resample_mask_filename)
 
-    # mask_resample_back(mask_filename, resample_mask_filename)
-
     return None
 
 
-def mask_resample_back(origin_mask, regis_mask) -> None:
+def mask_resample_back() -> None:
     """
     Resample the mask back to the original size.
-    :param origin_mask: The original mask.
-    :param regis_mask: The registered mask.
     :return: None
     """
-    ori_mask = sitk.ReadImage(origin_mask, sitk.sitkFloat32)
-    reg_mask = sitk.ReadImage(regis_mask, sitk.sitkFloat32)
-    reg_mask = sitk.Resample(reg_mask, ori_mask, sitk.Transform(), sitk.sitkNearestNeighbor, 0.0, reg_mask.GetPixelID())
-    reg_mask.CopyInformation(ori_mask)
-    reg_mask = sitk.Cast(reg_mask, sitk.sitkUInt16)
-    os.makedirs(os.path.join(CASE_DIR, "registration"), exist_ok=True)
-    sitk.WriteImage(reg_mask, os.path.join(CASE_DIR, "registration", f"registered-back-mask-{date.today()}.dcm"))
+    no_mask_list = ["Case 25", "Case 70", "Case 156", "Case 299", "Case 319", "Case 327", "Case 329", "Case 337"]
+    case_list = natsorted(os.listdir(REGISTRATION_DIR_127))
+    with tqdm(total=len(case_list)) as pbar:
+        for case in case_list:
+            pbar.set_description(f"{case} 3D mask resample back...")
+            if case in no_mask_list:
+                pbar.update()
+                continue
+            origin_mask = os.path.join(REGISTRATION_DIR_127, case, "mask", "result", f"{case}-1-mask.dcm")
+            regis_mask = os.path.join(REGISTRATION_DIR_127, case, "registration result", f"registered-mask-{date.today()}.dcm")
+            ori_mask = sitk.ReadImage(origin_mask, sitk.sitkFloat32)
+            reg_mask = sitk.ReadImage(regis_mask, sitk.sitkFloat32)
+            reg_mask = sitk.Resample(reg_mask, ori_mask, sitk.Transform(), sitk.sitkNearestNeighbor, 0.0, reg_mask.GetPixelID())
+            reg_mask.CopyInformation(ori_mask)
+            reg_mask = sitk.Cast(reg_mask, sitk.sitkUInt16)
+            sitk.WriteImage(reg_mask, os.path.join(REGISTRATION_DIR_127, case, "mask", "result", f"registered-back-mask-{date.today()}.dcm"))
+            pbar.update()
+
     return None
