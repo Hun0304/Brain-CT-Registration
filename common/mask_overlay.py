@@ -1,13 +1,12 @@
 
 import os
+import numpy as np
 import SimpleITK as sitk
 import matplotlib.pyplot as plt
 
 from tqdm import tqdm
 from datetime import date
 from natsort import natsorted
-
-from globel_veriable import REGISTRATION_DIR_127
 
 
 def visualization(origin_dicom: str, regis_dicom: str, result_dir: str) -> None:
@@ -18,11 +17,11 @@ def visualization(origin_dicom: str, regis_dicom: str, result_dir: str) -> None:
     :param result_dir: The directory of the output images.
     :return: None
     """
-    case_name = os.path.basename(regis_dicom)[:os.path.basename(origin_dicom).find("-")]
-    case_name = case_name[:case_name.rfind("-")]
-    origin = sitk.ReadImage(origin_dicom, sitk.sitkFloat32)
-    regis = sitk.ReadImage(regis_dicom, sitk.sitkFloat32)
+    case_name = os.path.basename(origin_dicom)[:os.path.basename(origin_dicom).find("-")]
+    origin = sitk.ReadImage(origin_dicom, sitk.sitkUInt16)
+    regis = sitk.ReadImage(regis_dicom, sitk.sitkUInt16)
     interval = 6
+    regis.CopyInformation(origin)
 
     # 計算需要創建多少個子圖
     total_slices = origin.GetSize()[2] if origin.GetSize()[2] < regis.GetSize()[2] else regis.GetSize()[2]
@@ -40,10 +39,11 @@ def visualization(origin_dicom: str, regis_dicom: str, result_dir: str) -> None:
             slice_idx = start_slice + j
             if slice_idx < end_slice:
                 dcmUint8 = sitk.Cast(
-                    sitk.IntensityWindowing(origin[:, :, slice_idx], windowMinimum=-2, windowMaximum=150),
+                    sitk.IntensityWindowing(origin[:, :, slice_idx], 0, 150),
                     sitk.sitkUInt8)
+
                 regisUint8 = sitk.Cast(
-                    sitk.IntensityWindowing(regis[:, :, slice_idx], windowMinimum=0, windowMaximum=205),
+                    sitk.IntensityWindowing(regis[:, :, slice_idx], 0, 205),
                     sitk.sitkUInt8)
                 # 建立空白影像
                 zeros = sitk.Image(dcmUint8.GetSize(), regisUint8.GetPixelID())
@@ -56,6 +56,8 @@ def visualization(origin_dicom: str, regis_dicom: str, result_dir: str) -> None:
                 ax.axis("off")  # 如果切片不夠，關閉多餘的子圖
 
         plt.savefig(os.path.join(result_dir, f"result_{i + 1}.png"))
+        fig.clf()
+        plt.close(fig)
         # plt.show()
 
     return None
@@ -111,29 +113,30 @@ def mask_overlay(dcm, mask, dir_path) -> None:
     return None
 
 
-def mask_overlay_main() -> None:
+def mask_overlay_main(dir_path: str, suffix=".dcm") -> None:
     """
     Main function.
     :return:
     """
-    no_mask_list = ["Case 25", "Case 70", "Case 156", "Case 299", "Case 319", "Case 327", "Case 329", "Case 337"]
-    case_list = natsorted(os.listdir(REGISTRATION_DIR_127))
+    # no_mask_list = ["Case 25", "Case 70", "Case 156", "Case 299", "Case 319", "Case 327", "Case 329", "Case 337"]
+    case_list = natsorted(os.listdir(dir_path))
     with tqdm(total=len(case_list)) as pbar:
-        for case_name in case_list:
+        for case_name in case_list[198:]:
             pbar.set_description(f"{case_name} is visualizing...")
-            if case_name in no_mask_list:
-                pbar.update()
-                continue
-            result_path = os.path.join(REGISTRATION_DIR_127, case_name, "result")
-            reg_path = os.path.join(REGISTRATION_DIR_127, case_name, "registration result")
-            mask_path = os.path.join(REGISTRATION_DIR_127, case_name, "mask", "result")
-            dicom_path = os.path.join(REGISTRATION_DIR_127, case_name, "dcm", "result")
-            reg_ct = os.path.join(reg_path, f"registered-ct-{date.today()}.dcm")
-            reg_mask = os.path.join(reg_path, f"registered-mask-{date.today()}.dcm")
-            dicom_bl = os.path.join(dicom_path, f"{case_name}-1-brain-resample.dcm")
-            dicom_fu = os.path.join(dicom_path, f"{case_name}-2-brain-resample.dcm")
-            mask_bl = os.path.join(mask_path, f"{case_name}-1-mask-resample.dcm")
-            mask_fu = os.path.join(mask_path, f"{case_name}-2-mask-resample.dcm")
+            # if case_name in no_mask_list:
+            #     pbar.update()
+            #     continue
+            result_path = os.path.join(dir_path, case_name, "result")
+            reg_path = os.path.join(dir_path, case_name, "registration result")
+            mask_path = os.path.join(dir_path, case_name, "mask", "result")
+            dicom_path = os.path.join(dir_path, case_name, "dcm", "result")
+            reg_ct = os.path.join(reg_path, f"registered-ct-{date.today()}{suffix}")
+            # reg_mask = os.path.join(reg_path, f"registered-mask-2023-10-24{suffix}")
+            reg_mask = os.path.join(reg_path, f"registered-mask-{date.today()}{suffix}")
+            dicom_bl = os.path.join(dicom_path, f"{case_name}-1-brain-resample{suffix}")
+            dicom_fu = os.path.join(dicom_path, f"{case_name}-2-brain-resample{suffix}")
+            mask_bl = os.path.join(mask_path, f"{case_name}-1-mask-resample{suffix}")
+            mask_fu = os.path.join(mask_path, f"{case_name}-2-mask-resample{suffix}")
             os.makedirs(result_path, exist_ok=True)
-            visualization(reg_mask, mask_bl, result_path)
+            visualization(mask_bl, reg_mask, result_path)
             pbar.update()

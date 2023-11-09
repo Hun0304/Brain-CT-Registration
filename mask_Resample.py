@@ -4,35 +4,13 @@ import cv2
 import numpy as np
 import SimpleITK as sitk
 
-from natsort import natsorted
-from typing import List
-from datetime import date
 from tqdm import tqdm
+from datetime import date
+from natsort import natsorted
 
-from globel_veriable import REGISTRATION_DIR_127
-from DICOM_Resample import resample_dicom, set_meta_data
-
-
-def merge_image(masks: List, mask_dir: str) -> None:
-    """
-    Merge the masks with the same name.
-    :param masks: The list of masks.
-    :param mask_dir: The directory of masks.
-    :return: None
-    """
-    temp = masks[0]
-    for mask in masks[1:]:
-        name = mask[:mask.rfind("-")]
-        if temp[:temp.rfind("-")] == name:
-            image_1 = cv2.imread(os.path.join(mask_dir, mask))
-            image_2 = cv2.imread(os.path.join(mask_dir, temp))
-            merge = cv2.add(image_1, image_2)
-            cv2.imwrite(os.path.join(mask_dir, name + ".tif"), merge)
-            os.remove(os.path.join(mask_dir, mask))
-            os.remove(os.path.join(mask_dir, temp))
-        else:
-            temp = mask
-    return None
+from medical.utils import set_meta_data, resample_dicom
+from common.globel_veriable import REGISTRATION_DIR_127
+from common.image_process import merge_image
 
 
 def mask2Dto3D(mask_dir: str, dicom_dir: str) -> None:
@@ -75,8 +53,8 @@ def mask2Dto3D(mask_dir: str, dicom_dir: str) -> None:
 
     output_path = os.path.abspath(os.path.join(mask_dir, "..", "result"))
     os.makedirs(output_path, exist_ok=True)
-    mask_filename = os.path.join(output_path, mask_list[0][:mask_list[0].rfind("-")] + "-mask" + ".dcm")
-    resample_mask_filename = os.path.join(output_path, mask_list[0][:mask_list[0].rfind("-")] + "-mask-resample" + ".dcm")
+    mask_filename = os.path.join(output_path, f"{mask_list[0][:mask_list[0].rfind('-')]}-mask.dcm")
+    resample_mask_filename = os.path.join(output_path, f"{mask_list[0][:mask_list[0].rfind('-')]}-mask-resample.dcm")
     mask_dcm = sitk.Cast(mask_dcm, sitk.sitkUInt16)
     resample_mask = sitk.Cast(resample_mask, sitk.sitkUInt16)
     sitk.WriteImage(mask_dcm, mask_filename)

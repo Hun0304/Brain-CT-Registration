@@ -1,21 +1,13 @@
 
 import os
-import shutil
-import numpy as np
-import SimpleITK as sitk
 
-from natsort import natsorted
-from typing import Tuple
-from tqdm import tqdm
-
-from DICOM_Resample import dicom2Dto3D, window2ct_value
-from mask_Resample import mask2Dto3D, mask_resample_back
+from common.globel_veriable import DATASETS_DIR_420, REGISTRATION_DIR_420, REGISTRATION_DIR_127
+from datasets.ich420.resample import DICOM_Resample_ICH420, Mask_Resample_ICH420
 from registration import registration_main
-from metric import metric_main
-from globel_veriable import DATASETS_DIR_127, REGISTRATION_DIR_127
-from utils import calc_correlation, visualization_hist, create_dir
-from preprocess import preprocess_127_dir
-from mask_overlay import mask_overlay_main
+from common.mask_overlay import mask_overlay_main
+
+
+# from mask_overlay import mask_overlay_main
 
 
 def main():
@@ -35,6 +27,15 @@ def main():
     # preprocess_127_dir(datasets_dicom_dir_fu)
     # preprocess_127_dir(datasets_mask_dir_bl)
     # preprocess_127_dir(datasets_mask_dir_fu)
+
+    datasets_dicom_dir = os.path.join(DATASETS_DIR_420, "Images")
+    datasets_mask_dir = os.path.join(DATASETS_DIR_420, "Labels")
+    # DICOM_Resample_ICH420(datasets_dicom_dir)
+    # Mask_Resample_ICH420(datasets_mask_dir)
+    # registration_main(REGISTRATION_DIR_420, ".nii.gz")
+    mask_overlay_main(REGISTRATION_DIR_420, ".nii.gz")
+    # mask_overlay_main(REGISTRATION_DIR_127)
+
 
     # resample 3D
     # ------------------------------------- #
@@ -100,7 +101,32 @@ def main():
 
     # mask resample back
     # ------------------------------------- #
-    mask_resample_back()
+    # mask_resample_back()
+
+    # get the meta data
+    # ------------------------------------- #
+    # case_list = natsorted(os.listdir(os.path.join(REGISTRATION_DIR_127)))
+    # meta_datas = {}
+    # no_mask_list = ["Case 25", "Case 70", "Case 156", "Case 299", "Case 319", "Case 327", "Case 329", "Case 337"]
+    # json_file = os.path.abspath(os.path.join(REGISTRATION_DIR_127, "..", "127_meta_datas.json"))
+    # with tqdm(total=len(case_list)) as pbar:
+    #     for case in case_list:
+    #         pbar.set_description(f"{case} is getting meta data...")
+    #         if case in no_mask_list:
+    #             pbar.update()
+    #             continue
+    #         dicom_bl_dir = os.path.join(REGISTRATION_DIR_127, case, "dcm", "BL")
+    #         dicom_fu_dir = os.path.join(REGISTRATION_DIR_127, case, "dcm", "FU")
+    #         _, meta_datas[f"{case}-1"] = get_meta_data(os.path.join(dicom_bl_dir, f"{case}-1-1.dcm"))
+    #         _, meta_datas[f"{case}-2"] = get_meta_data(os.path.join(dicom_fu_dir, f"{case}-2-1.dcm"))
+    #         pbar.update()
+    # print(meta_datas)
+    # with open(json_file, "w") as f:
+    #     json.dump(meta_datas, f)
+
+    # write to excel
+    # ------------------------------------- #
+    # write2excel()
 
 
 if __name__ == '__main__':

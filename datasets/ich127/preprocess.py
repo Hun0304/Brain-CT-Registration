@@ -1,10 +1,12 @@
 
 import os
 
+from tqdm import tqdm
+from shutil import copy2
 from natsort import natsorted
 
-from globel_veriable import REGISTRATION_DIR_127
-from utils import create_dir
+from common.globel_veriable import REGISTRATION_DIR_127, REGISTRATION_DIR_420
+from common.utils import create_dir
 from mask_Resample import mask2Dto3D
 
 
@@ -26,9 +28,9 @@ def preprocess_127_dir(dir: str) -> None:
             print(os.path.join(REGISTRATION_DIR_127, case_name))
             dicom_bl, dicom_fu, mask_bl, mask_fu = create_dir(os.path.join(REGISTRATION_DIR_127, case_name))
             print(os.path.join(dir, datasets_list[idx]))
-            # shutil.copy2(os.path.join(dir, datasets_list[idx]), os.path.join(mask_fu, datasets_list[idx]))
-            os.makedirs(os.path.abspath(os.path.join(mask_fu, "..", "result")), exist_ok=True)
-            print(len(os.listdir(os.path.abspath(os.path.join(mask_fu, "..", "result")))))
+            # copy2(os.path.join(dir, datasets_list[idx]), os.path.join(mask_fu, datasets_list[idx]))
+            os.makedirs(os.path.abspath(os.path.join(mask_fu, "../..", "result")), exist_ok=True)
+            print(len(os.listdir(os.path.abspath(os.path.join(mask_fu, "../..", "result")))))
             if datasets_list[idx] == datasets_list[idx + 1]:
                 continue
             try:
