@@ -7,7 +7,7 @@ import SimpleITK as sitk
 from tqdm import tqdm
 from natsort import natsorted
 
-from common.globel_veriable import REGISTRATION_DIR_420, BRAIN_CT_MIN, BRAIN_CT_MAX, BONE_CT_MIN, BONE_CT_MAX
+from common.globel_veriable import REGISTRATION_DIR_420, BRAIN_WINDOW_MIN, BRAIN_WINDOW_MAX, BONE_WINDOW_MIN, BONE_WINDOW_MAX
 from common.image_process import find_max_area, denoise
 from medical.utils import set_meta_data, resample_dicom
 
@@ -28,8 +28,8 @@ def DICOM_Resample_ICH420(datasets_dicom_dir: str) -> None:
             if case_name in dicom:
                 dicom = sitk.ReadImage(os.path.join(datasets_dicom_dir, dicom), sitk.sitkFloat32)
                 dicom = sitk.Flip(dicom, flip_axes)
-                brain_dicom = sitk.IntensityWindowing(dicom, BRAIN_CT_MIN, BRAIN_CT_MAX, 0, 255)
-                bone_setting = sitk.IntensityWindowing(dicom, BONE_CT_MIN, BONE_CT_MAX, 0, 255)
+                brain_dicom = sitk.IntensityWindowing(dicom, BRAIN_WINDOW_MIN, BRAIN_WINDOW_MAX, 0, 255)
+                bone_setting = sitk.IntensityWindowing(dicom, BONE_WINDOW_MIN, BONE_WINDOW_MAX, 0, 255)
                 bone_dicom = sitk.OtsuThreshold(bone_setting, 0, 1)
                 # denoise
                 brain_image = sitk.GetArrayFromImage(brain_dicom)
@@ -98,12 +98,14 @@ def Mask_Resample_ICH420(datasets_mask_dir: str) -> None:
                 bl_fu = case_name.split("-")[1]
                 output_path = os.path.join(REGISTRATION_DIR_420, case_number, "mask", "result")
                 os.makedirs(output_path, exist_ok=True)
-                mask = sitk.GetArrayFromImage(mask)
-                mask = np.where(mask > 0, 255, 0)
-                mask = sitk.GetImageFromArray(mask)
-                mask = sitk.Cast(mask, sitk.sitkUInt16)
+                output_mask = sitk.GetArrayFromImage(mask)
+                output_mask = np.where(output_mask > 0, 1, 0)
+                output_mask = sitk.GetImageFromArray(output_mask)
+                output_mask.CopyInformation(mask)
+                output_mask = sitk.Cast(output_mask, sitk.sitkUInt16)
                 res_mask = sitk.Cast(res_mask, sitk.sitkUInt16)
-                sitk.WriteImage(mask, os.path.join(output_path, f"{case_number}-{bl_fu}-mask.nii.gz"))
+
+                sitk.WriteImage(output_mask, os.path.join(output_path, f"{case_number}-{bl_fu}-mask.nii.gz"))
                 sitk.WriteImage(res_mask, os.path.join(output_path, f"{case_number}-{bl_fu}-mask-resample.nii.gz"))
             pbar.update()
 

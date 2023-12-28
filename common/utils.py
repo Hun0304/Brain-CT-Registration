@@ -1,30 +1,7 @@
 
 import os
-import json
-import matplotlib.pyplot as plt
 
 from typing import Tuple
-
-
-def visualization_hist(json_file: json) -> None:
-    """
-    Visualize the histogram.
-    :param json_file: The json file.
-    :return: None
-    """
-    values = []
-    with open(json_file, "r+") as f:
-        file = json.load(f)
-        for value in file.values():
-            values.append(abs(value))
-        plt.hist(values, bins=20, color="steelblue", edgecolor="k", alpha=0.65, rwidth=0.8)
-        plt.xlabel("Registration metric value")
-        plt.ylabel("Frequency")
-        plt.title(f"Registration metric value histogram, total={len(values)}")
-        plt.savefig(os.path.abspath(os.path.join(json_file, "../..", "histogram.png")))
-        # plt.show()
-
-    return None
 
 
 def create_dir(dir) -> Tuple[str, str, str, str]:

@@ -1,24 +1,34 @@
 
 import os
-from typing import Any, Tuple
-
-import SimpleITK as sitk
 import numpy as np
+import SimpleITK as sitk
 
-from medical import dicom_tags as dcm_tags
-from common.globel_veriable import BRAIN_CT_MIN, BRAIN_CT_MAX, BONE_CT_MIN, BONE_CT_MAX
+from typing import Any, Tuple
+from natsort import natsorted
+from matplotlib import pyplot as plt
+
+from medical.dicom_tags import METADATA_TAGS
+from common.globel_veriable import BRAIN_WINDOW_MIN, BRAIN_WINDOW_MAX, BONE_WINDOW_MIN, BONE_WINDOW_MAX
 from common.image_process import find_max_area, denoise
 
 
-def get_meta_data(dicom_path: str) -> Any:
+def get_meta_data(dicom_path: str, metadata_tag: str, show_all: bool = 0) -> Any:
     """
     Get the metadata of the image.
     :param dicom_path: dicom file path.
+    :param metadata_tag: The metadata of the image.
+    :param show_all: Whether to get all metadata.
     :return: None
     """
     dicom = sitk.ReadImage(dicom_path)
     case_name = dicom_path[dicom_path.rfind("\\") + 1:dicom_path.rfind("-")]
-    return case_name, dicom.GetMetaData(dcm_tags.manufacturer_tag)
+
+    if show_all:
+        for key in dicom.GetMetaDataKeys():
+            print(f"{key} = {dicom.GetMetaData(key).encode('utf-8', 'replace')}")
+        return None
+
+    return case_name, dicom.GetMetaData(metadata_tag).encode('utf-8', 'replace')
 
 
 def set_meta_data(save_image: sitk.Image, base_image: sitk.Image) -> sitk.Image:
@@ -41,7 +51,7 @@ def set_meta_data(save_image: sitk.Image, base_image: sitk.Image) -> sitk.Image:
 
 def resample_dicom(dicom_image: sitk.Image, target_spacing=(1.0, 1.0, 1.0), mask=False) -> np.ndarray:
     """
-    Resample the dicom image to space 1:1:1.
+    Resample the dicom image.
     :param dicom_image: The dicom image.
     :param mask: Whether the image is mask.
     :type target_spacing: The target spacing.
@@ -67,12 +77,12 @@ def resample_dicom(dicom_image: sitk.Image, target_spacing=(1.0, 1.0, 1.0), mask
     return sitk.GetArrayFromImage(resample_image)
 
 
-def window2ct_value(ww: int, wl: int) -> Tuple[int, int]:
+def window2ct_value(wl: int, ww: int) -> Tuple[int, int]:
     """
-    Convert the window width and window level to the CT value.
-    :param ww: Window width.
+    Convert the window level and window width to the CT value.
     :param wl: Window level.
-    :return: CT value.
+    :param ww: Window width.
+    :return: CT value min, CT value max.
     """
     return wl - ww // 2, wl + ww // 2
 
@@ -98,13 +108,16 @@ def dicom2Dto3D(dcm_file_dir: str) -> None:
         print("ERROR: No DICOM series found in the specified folder.")
         exit(1)
     series_id = series_ids[0]
-    dicom_names = reader.GetGDCMSeriesFileNames(dcm_file_dir, series_id)
+    dicom_names = natsorted(reader.GetGDCMSeriesFileNames(dcm_file_dir, series_id))
     reader.SetFileNames(dicom_names)
 
     image = reader.Execute()
+
     # window settings
-    brain_dicom = sitk.IntensityWindowing(image, BRAIN_CT_MIN, BRAIN_CT_MAX, 0, 255)
-    bone_setting = sitk.IntensityWindowing(image, BONE_CT_MIN, BONE_CT_MAX, 0, 255)
+    brain_ct_min, brain_ct_max = window2ct_value(BRAIN_WINDOW_MIN, BRAIN_WINDOW_MAX)
+    brain_dicom = sitk.IntensityWindowing(image, brain_ct_min, brain_ct_max, 0, 255)
+    bone_ct_min, bone_ct_max = window2ct_value(BONE_WINDOW_MIN, BONE_WINDOW_MAX)
+    bone_setting = sitk.IntensityWindowing(image, bone_ct_min, bone_ct_max, 0, 255)
     bone_dicom = sitk.OtsuThreshold(bone_setting, 0, 1)
     # bone_setting = sitk.Cast(bone_setting, sitk.sitkUInt16)
 
@@ -118,9 +131,9 @@ def dicom2Dto3D(dcm_file_dir: str) -> None:
                                 bone_image.shape[2]), dtype=np.uint16)
         bone_image = np.append(bone_image, black_slice, axis=0)
     brain_denoised_image = denoise(brain_image, bone_image)
-
     brain_denoised_dicom = sitk.GetImageFromArray(brain_denoised_image.astype(np.uint16))
     brain_denoised_dicom.CopyInformation(image)
+
     brain_resampled_array = resample_dicom(brain_denoised_dicom)
     brain_resampled_image = sitk.GetImageFromArray(brain_resampled_array.astype(np.uint16))
     brain_resampled_image = set_meta_data(brain_resampled_image, image)
@@ -153,8 +166,8 @@ def calc_correlation(img_1: str, img_2: str) -> Any:
     :param img_2: The second image.
     :return: The correlation between two images.
     """
-    image_1 = sitk.ReadImage(img_1, sitk.sitkUInt8)
-    image_2 = sitk.ReadImage(img_2, sitk.sitkUInt8)
+    image_1 = sitk.ReadImage(img_1, sitk.sitkFloat32)
+    image_2 = sitk.ReadImage(img_2, sitk.sitkFloat32)
 
     image_1_array = sitk.GetArrayFromImage(image_1)
     image_2_array = sitk.GetArrayFromImage(image_2)

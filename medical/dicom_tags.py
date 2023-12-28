@@ -1,7 +1,15 @@
 
-metadata_inter = '0028|1052'            # Rescale Intercept
-metadata_slope = '0028|1053'            # Rescale Slope
-metadata_slice_thickness = '0018|0050'  # Slice Thickness
-metadata_pixel_spacing = '0028|0030'    # Pixel Spacing
-modality_tag = "0008|0060"              # Modality
-manufacturer_tag = "0008|0070"          # Manufacturer
+METADATA_TAGS = {
+    "STUDY_DATE": "0008|0020",
+    "STUDY_TIME": "0008|0030",
+    "MODALITY": "0008|0060",
+    "MANUFACTURER": "0008|0070",
+    "PATIENT_NAME": "0010|0010",
+    "PATIENT_ID": "0010|0020",
+    "SLICE_THICKNESS": "0018|0050",
+    "IMAGE_ORIGIN": "0020|0032",
+    "IMAGE_ORIENTATION": "0020|0037",
+    "PIXEL_SPACING": "0028|0030",
+    "INTERCEPT": "0028|1052",
+    "SLOPE": "0028|1053"
+}

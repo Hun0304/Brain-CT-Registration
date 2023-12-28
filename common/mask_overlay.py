@@ -12,7 +12,7 @@ from natsort import natsorted
 def visualization(origin_dicom: str, regis_dicom: str, result_dir: str) -> None:
     """
     Visualize the registration result.
-    :param origin_dicom: The baseline image.   Red channel.
+    :param origin_dicom: The baseline image.        Red channel.
     :param regis_dicom: The follow-up image.      Green channel.
     :param result_dir: The directory of the output images.
     :return: None
@@ -21,7 +21,37 @@ def visualization(origin_dicom: str, regis_dicom: str, result_dir: str) -> None:
     origin = sitk.ReadImage(origin_dicom, sitk.sitkUInt16)
     regis = sitk.ReadImage(regis_dicom, sitk.sitkUInt16)
     interval = 6
-    regis.CopyInformation(origin)
+    if origin.GetSize()[2] == regis.GetSize()[2]:
+        regis.CopyInformation(origin)
+    else:
+        print(f"{case_name} has different size of images.")
+        # 生成黑背景
+        if origin.GetSize()[2] > regis.GetSize()[2]:
+            zeros = sitk.Image(origin.GetSize(), origin.GetPixelID())
+            zeros.CopyInformation(origin)
+            # if origin.GetSize()[0] > regis.GetSize()[0]:
+            #     #  clip the image
+            #     for i in range(regis.GetSize()[0]):
+            #         zeros[i, :, :] = regis[i, :, :]
+            # elif origin.GetSize()[1] > regis.GetSize()[1]:
+            #     for i in range(regis.GetSize()[1]):
+            #         zeros[:, i, :] = regis[:, i, :]
+            for i in range(regis.GetSize()[2]):
+                zeros[:, :, i] = regis[:, :, i]
+        else:
+            zeros = sitk.Image(regis.GetSize(), regis.GetPixelID())
+            zeros.CopyInformation(regis)
+            for i in range(origin.GetSize()[2]):
+                zeros[:, :, i] = origin[:, :, i]
+
+        # print(f"origin size: {origin.GetSize()}")
+        # print(f"zero size: {zeros.GetSize()}")
+        # print(f"regis size: {regis.GetSize()}")
+        # 用黑背景來補齊影像
+        if origin.GetSize()[2] > regis.GetSize()[2]:
+            regis = zeros
+        else:
+            origin = zeros
 
     # 計算需要創建多少個子圖
     total_slices = origin.GetSize()[2] if origin.GetSize()[2] < regis.GetSize()[2] else regis.GetSize()[2]
@@ -55,7 +85,7 @@ def visualization(origin_dicom: str, regis_dicom: str, result_dir: str) -> None:
             else:
                 ax.axis("off")  # 如果切片不夠，關閉多餘的子圖
 
-        plt.savefig(os.path.join(result_dir, f"result_{i + 1}.png"))
+        plt.savefig(os.path.join(result_dir, f"overlay_{i + 1}.png"))
         fig.clf()
         plt.close(fig)
         # plt.show()
@@ -120,23 +150,34 @@ def mask_overlay_main(dir_path: str, suffix=".dcm") -> None:
     """
     # no_mask_list = ["Case 25", "Case 70", "Case 156", "Case 299", "Case 319", "Case 327", "Case 329", "Case 337"]
     case_list = natsorted(os.listdir(dir_path))
-    with tqdm(total=len(case_list)) as pbar:
-        for case_name in case_list[198:]:
+    with tqdm(total=len(case_list), position=0) as pbar:
+        for case_name in case_list:
             pbar.set_description(f"{case_name} is visualizing...")
             # if case_name in no_mask_list:
             #     pbar.update()
             #     continue
-            result_path = os.path.join(dir_path, case_name, "result")
+            result_path = os.path.join(dir_path, case_name, "result", "brain shape", "resample")
             reg_path = os.path.join(dir_path, case_name, "registration result")
             mask_path = os.path.join(dir_path, case_name, "mask", "result")
             dicom_path = os.path.join(dir_path, case_name, "dcm", "result")
-            reg_ct = os.path.join(reg_path, f"registered-ct-{date.today()}{suffix}")
+            reg_ct = os.path.join(reg_path, f"registered-ct-2023-11-08{suffix}")
             # reg_mask = os.path.join(reg_path, f"registered-mask-2023-10-24{suffix}")
-            reg_mask = os.path.join(reg_path, f"registered-mask-{date.today()}{suffix}")
+            reg_mask = os.path.join(reg_path, f"registered-mask-2023-11-08{suffix}")
             dicom_bl = os.path.join(dicom_path, f"{case_name}-1-brain-resample{suffix}")
             dicom_fu = os.path.join(dicom_path, f"{case_name}-2-brain-resample{suffix}")
             mask_bl = os.path.join(mask_path, f"{case_name}-1-mask-resample{suffix}")
             mask_fu = os.path.join(mask_path, f"{case_name}-2-mask-resample{suffix}")
+
+            origin_mask_bl = os.path.join(mask_path, f"{case_name}-1-mask{suffix}")
+            origin_dicom_bl = os.path.join(dir_path, case_name, "dcm", "result", f"{case_name}-1-brain-denoised{suffix}")
+            origin_dicom_fu = os.path.join(dir_path, case_name, "dcm", "result", f"{case_name}-2-brain-denoised{suffix}")
+            resample_back_mask = os.path.join(mask_path, f"{case_name}-registered-back-mask-2023-11-24{suffix}")
+
             os.makedirs(result_path, exist_ok=True)
-            visualization(mask_bl, reg_mask, result_path)
+            if sitk.ReadImage(origin_dicom_bl, sitk.sitkFloat32).GetSize() != sitk.ReadImage(resample_back_mask, sitk.sitkFloat32).GetSize():
+                print(f"{case_name} has different size of images.",
+                      sitk.ReadImage(origin_dicom_bl, sitk.sitkFloat32).GetSize(),
+                      sitk.ReadImage(resample_back_mask, sitk.sitkFloat32).GetSize())
+            # else:
+            #     visualization(dicom_bl, reg_ct, result_path)
             pbar.update()

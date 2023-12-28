@@ -10,6 +10,49 @@ from natsort import natsorted
 from datetime import date
 
 
+def registration_roi(fixed_image, moving_image, mask=False, multi_model=False) \
+        -> Tuple[sitk.VersorRigid3DTransform, float]:
+    """
+    # Registration ROI
+    :return: None
+    """
+
+    interpolator = sitk.sitkNearestNeighbor if mask else sitk.sitkLinear
+    region = sitk.RegionOfInterest(fixed_image.GetSize(), [10, 10, 0], [50, 50, fixed_image.GetSize()[2]])
+
+    fixed_image_roi = sitk.RegionOfInterest(fixed_image, region)
+    moving_image_roi = sitk.RegionOfInterest(moving_image, region)
+
+    registration_method = sitk.ImageRegistrationMethod()
+
+    if multi_model:
+        registration_method.SetMetricAsMattesMutualInformation()
+    else:
+        registration_method.SetMetricAsCorrelation()
+
+    registration_method.SetMetricSamplingStrategy(registration_method.RANDOM)
+    registration_method.SetMetricSamplingPercentage(0.01)
+    registration_method.SetInterpolator(interpolator)
+    registration_method.SetOptimizerAsGradientDescent(learningRate=1.0,
+                                                      numberOfIterations=1000,
+                                                      convergenceMinimumValue=1e-6,
+                                                      convergenceWindowSize=10)
+    registration_method.SetOptimizerScalesFromPhysicalShift()
+    initial_transform = sitk.CenteredTransformInitializer(fixed_image,
+                                                          moving_image,
+                                                          sitk.VersorRigid3DTransform(),
+                                                          # sitk.Euler3DTransform(),
+                                                          sitk.CenteredTransformInitializerFilter.GEOMETRY)
+    registration_method.SetInitialTransform(initial_transform, inPlace=False)
+    transform = registration_method.Execute(fixed_image_roi, moving_image_roi)
+    registered_image = sitk.Resample(moving_image, fixed_image, transform, sitk.sitkLinear, 0.0,
+                                     moving_image.GetPixelID())
+
+    sitk.WriteImage(registered_image, "registered_image.nii")
+
+    return None
+
+
 def registration(fixed_image, moving_image, mask=False, multi_model=False) -> Tuple[sitk.VersorRigid3DTransform, float]:
     """
     # Registration

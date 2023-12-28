@@ -5,7 +5,7 @@ from tqdm import tqdm
 from shutil import copy2
 from natsort import natsorted
 
-from common.globel_veriable import REGISTRATION_DIR_127, REGISTRATION_DIR_420
+from common.globel_veriable import REGISTRATION_DIR_127
 from common.utils import create_dir
 from mask_Resample import mask2Dto3D
 
@@ -16,7 +16,6 @@ def preprocess_127_dir(dir: str) -> None:
     :param dir: The directory of the images.
     :return: None
     """
-    error_list = []
     datasets_list = natsorted(os.listdir(dir))
     case_name = datasets_list[0][:datasets_list[0].find("-")]
     for idx, f in enumerate(datasets_list, start=1):
@@ -33,9 +32,6 @@ def preprocess_127_dir(dir: str) -> None:
             print(len(os.listdir(os.path.abspath(os.path.join(mask_fu, "../..", "result")))))
             if datasets_list[idx] == datasets_list[idx + 1]:
                 continue
-            try:
-                mask2Dto3D(mask_fu, dicom_fu)
-            except:
-                pass
+            mask2Dto3D(mask_fu, dicom_fu)
 
     return None

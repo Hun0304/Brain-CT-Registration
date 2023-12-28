@@ -8,7 +8,7 @@ from tqdm import tqdm
 from datetime import date
 from natsort import natsorted
 
-from medical.utils import set_meta_data, resample_dicom
+from medical.utils import set_meta_data, resample_dicom, get_meta_data
 from common.globel_veriable import REGISTRATION_DIR_127
 from common.image_process import merge_image
 
@@ -63,27 +63,26 @@ def mask2Dto3D(mask_dir: str, dicom_dir: str) -> None:
     return None
 
 
-def mask_resample_back() -> None:
+def mask_resample_back(dir: str) -> None:
     """
     Resample the mask back to the original size.
+    :param dir: The directory of the mask.
     :return: None
     """
-    no_mask_list = ["Case 25", "Case 70", "Case 156", "Case 299", "Case 319", "Case 327", "Case 329", "Case 337"]
-    case_list = natsorted(os.listdir(REGISTRATION_DIR_127))
+    case_list = natsorted(os.listdir(dir))
     with tqdm(total=len(case_list)) as pbar:
         for case in case_list:
             pbar.set_description(f"{case} 3D mask resample back...")
-            if case in no_mask_list:
-                pbar.update()
-                continue
-            origin_mask = os.path.join(REGISTRATION_DIR_127, case, "mask", "result", f"{case}-1-mask.dcm")
-            regis_mask = os.path.join(REGISTRATION_DIR_127, case, "registration result", f"registered-mask-{date.today()}.dcm")
+            origin_mask = os.path.join(dir, case, "mask", "result", f"{case}-1-mask.nii.gz")
+            # regis_mask = os.path.join(dir, case, "registration result", f"registered-mask-{date.today()}.dcm")
+            regis_mask = os.path.join(dir, case, "registration result", "registered-mask-2023-11-08.nii.gz")
             ori_mask = sitk.ReadImage(origin_mask, sitk.sitkFloat32)
             reg_mask = sitk.ReadImage(regis_mask, sitk.sitkFloat32)
             reg_mask = sitk.Resample(reg_mask, ori_mask, sitk.Transform(), sitk.sitkNearestNeighbor, 0.0, reg_mask.GetPixelID())
             reg_mask.CopyInformation(ori_mask)
             reg_mask = sitk.Cast(reg_mask, sitk.sitkUInt16)
-            sitk.WriteImage(reg_mask, os.path.join(REGISTRATION_DIR_127, case, "mask", "result", f"registered-back-mask-{date.today()}.dcm"))
+            sitk.WriteImage(reg_mask, os.path.join(dir, case, "mask", "result", f"registered-back-mask-{date.today()}.nii.gz"))
+            # sitk.WriteImage(reg_mask, os.path.join(dir, case, "mask", "result", f"registered-back-mask-{date.today()}.dcm"))
             pbar.update()
 
     return None
