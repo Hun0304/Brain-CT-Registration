@@ -1,14 +1,12 @@
-
 import os
 import numpy as np
 import SimpleITK as sitk
 
 from typing import Any, Tuple
 from natsort import natsorted
-from matplotlib import pyplot as plt
+from collections import namedtuple
 
-from medical.dicom_tags import METADATA_TAGS
-from common.globel_veriable import BRAIN_WINDOW_MIN, BRAIN_WINDOW_MAX, BONE_WINDOW_MIN, BONE_WINDOW_MAX
+from common.globel_veriable import BRAIN_WINDOW, BONE_WINDOW
 from common.image_process import find_max_area, denoise
 
 
@@ -37,11 +35,6 @@ def set_meta_data(save_image: sitk.Image, base_image: sitk.Image) -> sitk.Image:
     :param save_image: The image to be saved.
     :param base_image: The image to be referenced.
     """
-
-    # save_image.SetMetaData(dcm_tags.modality_tag, save_image.GetMetaData(dcm_tags.modality_tag))
-    # save_image.SetMetaData(dcm_tags.metadata_inter, save_image.GetMetaData(dcm_tags.metadata_inter))
-    # save_image.SetMetaData(dcm_tags.metadata_slope, save_image.GetMetaData(dcm_tags.metadata_slope))
-    # save_image.SetMetaData(dcm_tags.metadata_slice_thickness, save_image.GetMetaData(dcm_tags.metadata_slice_thickness))
 
     save_image.SetOrigin(base_image.GetOrigin())
     save_image.SetDirection(base_image.GetDirection())
@@ -114,10 +107,8 @@ def dicom2Dto3D(dcm_file_dir: str) -> None:
     image = reader.Execute()
 
     # window settings
-    brain_ct_min, brain_ct_max = window2ct_value(BRAIN_WINDOW_MIN, BRAIN_WINDOW_MAX)
-    brain_dicom = sitk.IntensityWindowing(image, brain_ct_min, brain_ct_max, 0, 255)
-    bone_ct_min, bone_ct_max = window2ct_value(BONE_WINDOW_MIN, BONE_WINDOW_MAX)
-    bone_setting = sitk.IntensityWindowing(image, bone_ct_min, bone_ct_max, 0, 255)
+    brain_dicom = sitk.IntensityWindowing(image, BRAIN_WINDOW.CT_MIN, BRAIN_WINDOW.CT_MAX, 0, 255)
+    bone_setting = sitk.IntensityWindowing(image, BONE_WINDOW.CT_MIN, BONE_WINDOW.CT_MAX, 0, 255)
     bone_dicom = sitk.OtsuThreshold(bone_setting, 0, 1)
     # bone_setting = sitk.Cast(bone_setting, sitk.sitkUInt16)
 
@@ -159,20 +150,65 @@ def dicom2Dto3D(dcm_file_dir: str) -> None:
     return None
 
 
-def calc_correlation(img_1: str, img_2: str) -> Any:
+class Calculator:
     """
-    Calculate the correlation between two images.
-    :param img_1: The first image.
-    :param img_2: The second image.
-    :return: The correlation between two images.
+    The class of calculator.
     """
-    image_1 = sitk.ReadImage(img_1, sitk.sitkFloat32)
-    image_2 = sitk.ReadImage(img_2, sitk.sitkFloat32)
 
-    image_1_array = sitk.GetArrayFromImage(image_1)
-    image_2_array = sitk.GetArrayFromImage(image_2)
+    def __init__(self):
+        pass
 
-    correlation_value = np.corrcoef(image_1_array.flatten(), image_2_array.flatten())[0, 1]
+    @staticmethod
+    def calc_correlation(img_bl: str, img_fu: str) -> Any:
+        """
+        Calculate the correlation between two images.
+        :param img_bl: The baseline image.
+        :param img_fu: The follow-up image.
+        :return: The correlation between two images.
+        """
+        dicom_bl = sitk.ReadImage(img_bl, sitk.sitkFloat32)
+        dicom_fu = sitk.ReadImage(img_fu, sitk.sitkFloat32)
+        bl_array = sitk.GetArrayFromImage(dicom_bl)
+        fu_array = sitk.GetArrayFromImage(dicom_fu)
 
-    print(f"correlation value: {correlation_value}")
-    return correlation_value
+        correlation_value = np.corrcoef(bl_array.flatten(), fu_array.flatten())[0, 1]
+
+        print(f"correlation value: {correlation_value}")
+        return correlation_value
+
+    @staticmethod
+    def calc_he(mask_bl: str, mask_fu: str) -> namedtuple:
+        """
+        Calculate the Hematoma Expansion.
+        :param mask_bl: The baseline mask.
+        :param mask_fu: The follow-up mask.
+        :return: baseline volume, follow volume, volume change,
+                 volume change rate, Hematoma Expansion.
+        """
+
+        def calc_volume(mask: str) -> float:
+            """
+            Calculate the volume of the mask.
+            :param mask: The mask.
+            :return: The volume of the mask.
+            """
+            mask_image = sitk.ReadImage(mask, sitk.sitkFloat32)
+            mask_array = sitk.GetArrayFromImage(mask_image)
+            mask_array = np.where(mask_array > 0, 1, 0)
+
+            voxel_volume = np.prod(mask_image.GetSpacing())
+            volume = np.sum(mask_array) * voxel_volume
+
+            return volume
+
+        VolumeData = namedtuple("VolumeData",
+                                ["volume_bl", "volume_fu", "volume_change", "volume_change_rate", "he"])
+
+        volume_bl = calc_volume(mask_bl) / 1000
+        volume_fu = calc_volume(mask_fu) / 1000
+
+        volume_change = volume_fu - volume_bl
+        volume_change_rate = volume_change / volume_bl
+        he = 1 if volume_change_rate >= 0.33 or volume_change >= 6 else 0
+
+        return VolumeData(volume_bl, volume_fu, volume_change, volume_change_rate, he)

@@ -1,3 +1,6 @@
+"""
+This file is used to visualize the registration result.
+"""
 
 import os
 import numpy as np
@@ -71,9 +74,12 @@ def visualization(origin_dicom: str, regis_dicom: str, result_dir: str) -> None:
                 dcmUint8 = sitk.Cast(
                     sitk.IntensityWindowing(origin[:, :, slice_idx], 0, 150),
                     sitk.sitkUInt8)
-
+                _regis = sitk.GetArrayFromImage(regis)
+                _regis = np.where(_regis > 0, 255, 0)
+                _regis = sitk.GetImageFromArray(_regis)
+                _regis.CopyInformation(regis)
                 regisUint8 = sitk.Cast(
-                    sitk.IntensityWindowing(regis[:, :, slice_idx], 0, 205),
+                    sitk.IntensityWindowing(_regis[:, :, slice_idx], 0, 205),
                     sitk.sitkUInt8)
                 # 建立空白影像
                 zeros = sitk.Image(dcmUint8.GetSize(), regisUint8.GetPixelID())
@@ -146,17 +152,13 @@ def mask_overlay(dcm, mask, dir_path) -> None:
 def mask_overlay_main(dir_path: str, suffix=".dcm") -> None:
     """
     Main function.
-    :return:
+    :return: None
     """
-    # no_mask_list = ["Case 25", "Case 70", "Case 156", "Case 299", "Case 319", "Case 327", "Case 329", "Case 337"]
     case_list = natsorted(os.listdir(dir_path))
     with tqdm(total=len(case_list), position=0) as pbar:
         for case_name in case_list:
             pbar.set_description(f"{case_name} is visualizing...")
-            # if case_name in no_mask_list:
-            #     pbar.update()
-            #     continue
-            result_path = os.path.join(dir_path, case_name, "result", "brain shape", "resample")
+            result_path = os.path.join(dir_path, case_name, "result", "bl + regis mask overlay")
             reg_path = os.path.join(dir_path, case_name, "registration result")
             mask_path = os.path.join(dir_path, case_name, "mask", "result")
             dicom_path = os.path.join(dir_path, case_name, "dcm", "result")
@@ -174,10 +176,11 @@ def mask_overlay_main(dir_path: str, suffix=".dcm") -> None:
             resample_back_mask = os.path.join(mask_path, f"{case_name}-registered-back-mask-2023-11-24{suffix}")
 
             os.makedirs(result_path, exist_ok=True)
-            if sitk.ReadImage(origin_dicom_bl, sitk.sitkFloat32).GetSize() != sitk.ReadImage(resample_back_mask, sitk.sitkFloat32).GetSize():
-                print(f"{case_name} has different size of images.",
-                      sitk.ReadImage(origin_dicom_bl, sitk.sitkFloat32).GetSize(),
-                      sitk.ReadImage(resample_back_mask, sitk.sitkFloat32).GetSize())
+            # if sitk.ReadImage(origin_dicom_bl, sitk.sitkFloat32).GetSize() != sitk.ReadImage(resample_back_mask, sitk.sitkFloat32).GetSize():
+            #     print(f"{case_name} has different size of images.",
+            #           sitk.ReadImage(origin_dicom_bl, sitk.sitkFloat32).GetSize(),
+            #           sitk.ReadImage(resample_back_mask, sitk.sitkFloat32).GetSize())
             # else:
-            #     visualization(dicom_bl, reg_ct, result_path)
+            visualization(origin_dicom_bl, resample_back_mask, result_path)
             pbar.update()
+    return None

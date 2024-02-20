@@ -15,7 +15,8 @@
 
 ## Logs
 **/logs
-**/output
+/output
+!sys/io/output
 
 ## Other
 .virtual_documents
