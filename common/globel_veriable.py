@@ -47,10 +47,10 @@ class WindowSettings:
 
 # Datasets Directory
 ICH_PROJECT_DIR = DatasetsDir(r"D:\MS\TRC-LAB\ICH Project")
-ICH_127 = DatasetsDir(REGISTRATION_DIR=r"D:\MS\TRC-LAB\ICH Project\Registration\ICH_127",
-                      DATASETS_DIR=r"D:\MS\TRC-LAB\ICH Datasets\ICH_127")
-ICH_420 = DatasetsDir(REGISTRATION_DIR=r"D:\MS\TRC-LAB\ICH Project\Registration\ICH_420",
-                      DATASETS_DIR=r"D:\MS\TRC-LAB\ICH Datasets\ICH_420")
+ICH_127_DIR = DatasetsDir(REGISTRATION_DIR=r"D:\MS\TRC-LAB\ICH Project\Registration\ICH_127",
+                          DATASETS_DIR=r"D:\MS\TRC-LAB\ICH Datasets\ICH_127")
+ICH_420_DIR = DatasetsDir(REGISTRATION_DIR=r"D:\MS\TRC-LAB\ICH Project\Registration\ICH_420",
+                          DATASETS_DIR=r"D:\MS\TRC-LAB\ICH Datasets\ICH_420")
 
 # Window Settings
 BRAIN_WINDOW = WindowSettings(40, 80)

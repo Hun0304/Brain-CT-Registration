@@ -2,16 +2,20 @@
 Main file.
 """
 
-from common.globel_veriable import BONE_WINDOW, ICH_127, ICH_PROJECT_DIR
+from tqdm.rich import tqdm
 
-
-# from mask_overlay import mask_overlay_main
+from common.globel_veriable import ICH_420_DIR
+from mysys.io.input import HematomaExpansionDataInputProcessor
+from collections import Counter
 
 
 def main():
     """
     Main function.
     """
+    he_data = HematomaExpansionDataInputProcessor(ICH_420_DIR.REGISTRATION_DIR, "ICH_420").he_data_reader()
+    for row in he_data:
+        print(row)
 
     return None
 

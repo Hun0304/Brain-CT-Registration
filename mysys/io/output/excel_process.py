@@ -51,6 +51,7 @@ class DataOutputToExcelProcessorBase:
                 ws.cell(row=idx, column=i + 1, value=value)
         output_file = os.path.abspath(os.path.join(self.__datasets_dir,
                                                    "..",
+                                                   "output",
                                                    f"{self.__output_file_prefix}_{sheet_name}.xlsx"))
         wb.save(output_file)
 
@@ -126,6 +127,7 @@ class MetadataDataOutputProcessor(DataOutputToExcelProcessorBase):
         meta_datas = {}
         json_file = os.path.abspath(os.path.join(self.__datasets_dir,
                                                  "..",
+                                                 "output",
                                                  f"{self.__datasets_dir.split(os.sep)[-1]}_metadata.json"))
         meta_data_tags = MetaDataTags()
         with tqdm(total=len(case_list)) as pbar:
@@ -176,6 +178,7 @@ class MetadataDataOutputProcessor(DataOutputToExcelProcessorBase):
         columns = ["CaseName", "PatientName", "PatientID", "StudyDate", "StudyTime", "Manufacturer", "Modality"]
         meta_data_file = os.path.abspath(os.path.join(self.__datasets_dir,
                                                       "..",
+                                                      "output",
                                                       f"{self.__datasets_dir.split(os.sep)[-1]}_metadata.json"))
         with open(meta_data_file, "r+") as f:
             meta_datas = json.load(f)
@@ -214,6 +217,7 @@ class MetricValueDataOutputProcessor(DataOutputToExcelProcessorBase):
         columns = ["Case name", "Correlation Metric Value", "Baseline", "Follow-up"]
         metric_value = os.path.abspath(os.path.join(self.__datasets_dir,
                                                     "..",
+                                                    "output",
                                                     f"{self.__datasets_dir.split(os.sep)[-1]}_metric_value.json"))
 
         with open(metric_value, "r+") as f:
